@@ -327,6 +327,36 @@ struct RootPaletteView: View {
             if vm.mode == .emoji { moveEmojiRow(-1) } else { move(-1) }
             return .handled
         }
+        .onKeyPress(keys: ["n", "p"], phases: .down) { press in
+            guard settings.emacsStyleNavigation, press.modifiers == [.control] else {
+                return .ignored
+            }
+            switch press.key.character {
+            case "n":
+                if isCollapsed {
+                    vm.selection = 0
+                    core.expandFromCompact()
+                } else if menuOpen {
+                    moveMenu(1)
+                } else if vm.mode == .emoji {
+                    moveEmojiRow(1)
+                } else {
+                    move(1)
+                }
+            case "p":
+                guard !isCollapsed else { return .ignored }
+                if menuOpen {
+                    moveMenu(-1)
+                } else if vm.mode == .emoji {
+                    moveEmojiRow(-1)
+                } else {
+                    move(-1)
+                }
+            default:
+                return .ignored
+            }
+            return .handled
+        }
         // Horizontal arrows step the emoji grid; everywhere else they stay with the field editor's caret. An open menu swallows them so the list behind never moves.
         .onKeyPress(.leftArrow) {
             if menuOpen { return .handled }

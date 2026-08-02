@@ -24,6 +24,7 @@ struct SettingsBackup: Codable {
         var popToRootSeconds: Int?
         var compactMode: Bool?
         var showFavoritesInCompactMode: Bool?
+        var emacsStyleNavigation: Bool?
         var searchScopes: [String]?
         var openOnCursorScreen: Bool?
         // `snippetsEnabled` is deliberately absent: it doubles as keyword-expansion consent, and an import must not enable keystroke listening.
@@ -80,6 +81,7 @@ extension SettingsBackup {
             popToRootSeconds: s.popToRootTimeout.rawValue,
             compactMode: s.compactMode,
             showFavoritesInCompactMode: s.showFavoritesInCompactMode,
+            emacsStyleNavigation: s.emacsStyleNavigation,
             searchScopes: s.searchScopes,
             openOnCursorScreen: s.openOnCursorScreen,
             customCommandsEnabled: s.customCommandsEnabled,
@@ -196,6 +198,10 @@ extension SettingsBackup {
         }
         if let flag = s.showFavoritesInCompactMode {
             settings.showFavoritesInCompactMode = flag
+            count += 1
+        }
+        if let flag = s.emacsStyleNavigation {
+            settings.emacsStyleNavigation = flag
             count += 1
         }
         if let scopes = s.searchScopes {

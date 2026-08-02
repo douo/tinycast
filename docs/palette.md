@@ -20,6 +20,9 @@ The flat `selection` index is the single source of truth for highlight / activat
 match the visible row order**, including the inline calculator card at index 0 when present (see
 [calculator.md](calculator.md)).
 
+`↑` and `↓` move the selection. **Emacs-style navigation** is an optional General setting; when
+enabled, `⌃N` and `⌃P` perform the same next/previous movement (including menu and emoji-grid rows).
+
 ## Window placement
 
 `PaletteWindowController` resolves an anchor (left edge + top edge) **once per summon** and reuses it

@@ -67,6 +67,20 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            SettingsCard(header: "Keyboard") {
+                SettingsRow(
+                    title: "Emacs-style navigation",
+                    subtitle: "Use ⌃N and ⌃P to move through palette results.",
+                    systemImage: "keyboard",
+                    tint: .indigo
+                ) {
+                    Toggle("", isOn: $settings.emacsStyleNavigation)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                }
+            }
+
             SettingsCard(header: "Hyper Key") {
                 SettingsRow(
                     title: "Hyper Key",

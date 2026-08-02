@@ -38,6 +38,7 @@ final class AppSettings: ObservableObject {
         static let popToRootTimeout = "popToRootTimeout"
         static let compactMode = "compactMode"
         static let showFavoritesInCompactMode = "showFavoritesInCompactMode"
+        static let emacsStyleNavigation = "emacsStyleNavigation"
         static let searchScopes = "launcherSearchScopes"
         static let openOnCursorScreen = "openOnCursorScreen"
         static let customCommandsEnabled = "customCommandsEnabled"
@@ -105,6 +106,11 @@ final class AppSettings: ObservableObject {
     /// Pin favorite app icons to the right of the compact search bar (⌘1–⌘5 to launch).
     @Published var showFavoritesInCompactMode: Bool {
         didSet { defaults.set(showFavoritesInCompactMode, forKey: Key.showFavoritesInCompactMode) }
+    }
+
+    /// Use Control-N and Control-P to move the palette selection, alongside the arrow keys.
+    @Published var emacsStyleNavigation: Bool {
+        didSet { defaults.set(emacsStyleNavigation, forKey: Key.emacsStyleNavigation) }
     }
 
     /// Summon the palette on the display under the pointer instead of the one holding the menu bar.
@@ -186,6 +192,10 @@ final class AppSettings: ObservableObject {
         showFavoritesInCompactMode =
             defaults.object(forKey: Key.showFavoritesInCompactMode) == nil
             || defaults.bool(forKey: Key.showFavoritesInCompactMode)
+        // Defaults to true, so absence must be distinguished from a stored `false`.
+        emacsStyleNavigation =
+            defaults.object(forKey: Key.emacsStyleNavigation) == nil
+            || defaults.bool(forKey: Key.emacsStyleNavigation)
         // An unset key means "never configured" and seeds the defaults; a stored empty array is a user who deliberately cleared the list.
         searchScopes = defaults.stringArray(forKey: Key.searchScopes) ?? SearchScopes.defaults
         openOnCursorScreen =
