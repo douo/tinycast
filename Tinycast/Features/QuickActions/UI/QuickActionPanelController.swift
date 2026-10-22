@@ -19,7 +19,7 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
         metrics: InterfaceMetrics,
         languages: [Locale.Language],
         onRetranslate: @escaping (Locale.Language) -> Void,
-        onReplace: @escaping (String) -> Void
+        onReplace: ((String) -> Void)?
     ) {
         dismiss()
         self.state = state
@@ -30,6 +30,7 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
             rootView: QuickActionResultView(
                 state: state,
                 languages: languages,
+                allowsReplacement: onReplace != nil,
                 onReplace: { [weak self] in self?.replace(state.output) },
                 onCopy: { [weak self] in self?.copyOutput() },
                 onCancel: { [weak self] in self?.dismiss() },
@@ -48,8 +49,10 @@ final class QuickActionPanelController: NSObject, NSWindowDelegate {
         panel.onKey = { [weak self] key in
             guard let self, let state = self.state else { return }
             switch key {
-            case .replace: if state.canReplace { self.replace(state.output) }
-            case .copy: if state.canReplace { self.copyOutput() }
+            case .replace:
+                guard state.hasOutput else { return }
+                if self.onReplace != nil { self.replace(state.output) } else { self.copyOutput() }
+            case .copy: if state.hasOutput { self.copyOutput() }
             case .cancel: self.dismiss()
             }
         }

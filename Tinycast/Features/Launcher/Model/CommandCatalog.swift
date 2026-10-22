@@ -55,7 +55,7 @@ extension SettingsTab {
         case .quicklinks:
             [.createQuicklink, .searchQuicklinks, .importQuicklinks, .exportQuicklinks]
         case .ai: [.quickAI, .aiChat]
-        case .quickActions: [.fixGrammar, .rewrite, .translate, .summarize]
+        case .quickActions: [.fixGrammar, .rewrite, .translate, .translateScreenshot, .summarize]
         case .fileSearch: [.searchFiles]
         case .notes: [.showNotes, .createNote, .searchNotes]
         case .snippets: [.searchSnippets, .createSnippet]
@@ -81,6 +81,6 @@ extension CommandID {
         }
 
     var entryKind: AppEntry.Kind {
-        builtInQuickAction == nil ? .command : .quickAction
+        builtInQuickAction != nil || self == .translateScreenshot ? .quickAction : .command
     }
 }

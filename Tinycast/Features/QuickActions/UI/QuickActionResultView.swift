@@ -5,6 +5,7 @@ struct QuickActionResultView: View {
     @Environment(\.metrics) private var metrics
     let state: QuickActionPanelState
     let languages: [Locale.Language]
+    let allowsReplacement: Bool
     let onReplace: () -> Void
     let onCopy: () -> Void
     let onCancel: () -> Void
@@ -197,11 +198,13 @@ struct QuickActionResultView: View {
             Button("Dismiss", action: onCancel)
                 .buttonStyle(.modalAction(.cancel, fillsWidth: false))
             Button("Copy", action: onCopy)
-                .buttonStyle(.modalAction(.standard, fillsWidth: false))
-                .disabled(!state.canReplace)
-            Button("Replace", action: onReplace)
-                .buttonStyle(.modalAction(.primary, fillsWidth: false))
-                .disabled(!state.canReplace)
+                .buttonStyle(.modalAction(allowsReplacement ? .standard : .primary, fillsWidth: false))
+                .disabled(!state.hasOutput)
+            if allowsReplacement {
+                Button("Replace", action: onReplace)
+                    .buttonStyle(.modalAction(.primary, fillsWidth: false))
+                    .disabled(!state.hasOutput)
+            }
         }
         .padding(.horizontal, metrics.spacing.xxl)
         .padding(.vertical, metrics.spacing.xl)
