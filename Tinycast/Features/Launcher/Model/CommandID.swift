@@ -7,6 +7,7 @@ enum CommandID: String, CaseIterable, Sendable {
     case fixGrammar = "command:fix-grammar"
     case rewrite = "command:rewrite"
     case translate = "command:translate"
+    case translateScreenshot = "command:translate-screenshot"
     case summarize = "command:summarize"
     case calculatorHistory = "command:calculator-history"
     case clipboardHistory = "command:clipboard-history"
@@ -82,6 +83,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .fixGrammar: return BuiltInQuickAction.fixGrammar.titleResource
         case .rewrite: return BuiltInQuickAction.rewrite.titleResource
         case .translate: return BuiltInQuickAction.translate.titleResource
+        case .translateScreenshot: return "Translate Screenshot"
         case .summarize: return BuiltInQuickAction.summarize.titleResource
         case .calculatorHistory: return "Calculator History"
         case .clipboardHistory: return "Clipboard History"
@@ -133,6 +135,7 @@ enum CommandID: String, CaseIterable, Sendable {
         case .fixGrammar: return BuiltInQuickAction.fixGrammar.symbol
         case .rewrite: return BuiltInQuickAction.rewrite.symbol
         case .translate: return BuiltInQuickAction.translate.symbol
+        case .translateScreenshot: return "viewfinder"
         case .summarize: return BuiltInQuickAction.summarize.symbol
         case .calculatorHistory: return "plus.forwardslash.minus"
         case .clipboardHistory: return "doc.on.clipboard"

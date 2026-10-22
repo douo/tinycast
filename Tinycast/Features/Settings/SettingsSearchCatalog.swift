@@ -334,7 +334,10 @@ enum SettingsSearchCatalog {
             keywords: ["llm", "ai", "default"]),
         .init(
             .quickActionsTranslate, "Translate to",
-            keywords: ["language", "locale"])
+            keywords: ["language", "locale"]),
+        .init(
+            group: .quickActionsTranslate, "Translate Screenshot",
+            keywords: ["screenshot", "capture", "ocr", "screen", "shortcut"])
     ]
 
     private static let dictation: [SettingsSearchEntry] = [

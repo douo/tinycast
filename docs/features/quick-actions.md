@@ -1,8 +1,9 @@
 # Quick Actions
 
-Act on whatever text is selected, in whatever app is frontmost. Four are shipped: Fix Grammar,
+Act on selected text or a captured screen region. Four transformations are shipped: Fix Grammar,
 Rewrite, Translate and Summarize, each with its own bindable shortcut **and its own launcher command**,
-both listed in **Settings → Quick Actions**. Three go through the AI provider layer; Translate goes to
+both listed in **Settings → Quick Actions**. Translate Screenshot adds a second input to Translate,
+with its own launcher command and shortcut in the same pane. Three go through the AI provider layer; Translate goes to
 Apple's own translator. The result either replaces the selection or arrives in a floating panel, per
 action.
 
@@ -16,7 +17,7 @@ selectable Markdown renderer with AI Chat.
 
 - **Off out of the box, and off means the shortcuts do nothing.** `AppSettings.quickActionsEnabled`
   is the flag and `QuickActionCoordinator` is the only place that reads it: no selection is read, no
-  provider is built, no panel opens. The four commands leave the launcher's Quick Actions slice
+  provider is built, no screenshot is taken, no panel opens. The five commands leave the launcher's Quick Actions slice
   through `AppIndex.setCommandsVisible`, and the custom ones leave it through
   `AppIndex.setCustomQuickActions`, the way Notes and AI Chat drop theirs. Carbon bindings stay
   registered, so re-enabling restores every shortcut without touching the hotkey layer. The flag
@@ -26,6 +27,10 @@ selectable Markdown renderer with AI Chat.
   `QuickActionCoordinator.run(_:)`, which captures the target **before** hiding the palette. An
   external app remains the usual target; a selected passage in the Notes editor is captured directly
   from its text view. Hiding there rather than at each caller keeps the two paths identical.
+- **Screenshot translation changes only the input.** Its command enters `translateScreenshot()`,
+  shares the coordinator's single task, and feeds recognized text into the same Translate action.
+  It has no replacement target: the result always opens in the existing panel, with Copy as its
+  primary action, even when selection translation is configured to replace directly.
 - **Enabling is consent, and it is the only place Accessibility is requested.** The toggle confirms
   through `DialogController` first and then calls `Permissions.ensureAccessibility()`, the pattern
   `SnippetCoordinator.setSnippetsEnabled` established. Everything else — a shortcut press, a
@@ -123,7 +128,7 @@ takes the choice with it.
 `HotKeyAction.quickAction(id:)` under `hotkey.quickAction.<uuid>`, indexed in `boundQuickActionIDs` so
 `HotKeyManager.start` can prune a binding whose action was deleted while Tinycast was off.
 
-**The pane draws its own `AliasField`.** The four are named in `SettingsTab.ownedCommands`, so
+**The pane draws its own `AliasField`.** The five commands are named in `SettingsTab.ownedCommands`, so
 Settings → Commands no longer draws theirs. Without it, `deleteCustomQuickAction` would be clearing an
 alias no surface could set.
 
@@ -145,6 +150,24 @@ only what the reader actually changed, so a new action arrives with its own defa
 whatever a missing key would have meant.
 
 ## Translation
+
+**Translate Screenshot is an input command, not a fifth transformation.** `BuiltInQuickAction` and
+translation preferences are unchanged. The coordinator hides the palette and any earlier result,
+requests Screen Recording access only on invocation, and hands acquisition to `ScreenshotTextReader`.
+The system's `/usr/sbin/screencapture -i -s -x` supplies interactive region selection;
+ScreenCaptureKit's screenshot API has no region-selection UI. Escape cancels without translating.
+
+`ScreenshotTextReader` gives its temporary PNG to the existing `ClipboardTextWorker` by file URL.
+The bundled helper recognizes it locally with Vision's modern `RecognizeTextRequest`; no clipboard
+item, index entry, network request or second OCR engine is involved. Each run owns a private temporary
+directory, removed on success, refusal, failure and cancellation after the child processes are reaped.
+Capture runs off-main and cancellation terminates its process; the worker retains its own recognition
+timeout and cancellation. Empty recognition reports a HUD. The coordinator checks cancellation before
+opening the panel, so disabling Quick Actions while capturing cannot reopen it on completion.
+
+The panel keeps the same language picker, retranslation, copy and missing-language download flow.
+Screenshot results have no Replace control, and Return copies the finished result. Selection results
+keep their existing delivery behavior.
 
 `TextTranslator` uses Apple's translator rather than the language model: it runs on device, costs
 nothing on every route, and a 3B model is markedly worse at it. `NLLanguageRecognizer` supplies the
@@ -308,6 +331,14 @@ failure handler, so automatic expansion stays silent as before.
   translate rather than call the target language missing.
 - Translate Korean text with Korean not downloaded and the target language installed: the panel names
   Korean, the language that is actually missing.
+- Run Translate Screenshot from the launcher and its shortcut; capture English and Chinese text,
+  switch target languages, and copy the result. Confirm there is no Replace control and Return copies.
+- Set Translate to Replace, then capture a screenshot: it still previews and leaves the frontmost
+  selection untouched. Existing selection translation still replaces as configured.
+- Cancel region selection with Escape, capture a region with no text, deny Screen Recording, and
+  disable Quick Actions during capture: no stale result appears, and temporary screenshots are removed.
+- Hide Translate Screenshot in the launcher: its shortcut still works; disabling Quick Actions hides
+  it and makes that shortcut inert. Its alias and shortcut survive relaunch.
 - Revoke Accessibility while enabled: a HUD explains instead of failing silently.
 - Harnesses: `quick-action-test` (action metadata, prompt boundaries, preview choices, routes and
   their repair) and

@@ -164,6 +164,7 @@ If a change touches anything in the right column, the harness on the left is man
 | `uninstall-coordinator-test` | Confirmation and the post-confirmation quit gate; recorded quit and Trash effects only |
 | `quicklink-test` | all of `Quicklinks/Model/`, plus editor drafts and placeholder selection |
 | `quicklink-coordinator-test` | Opening and requested arguments, launcher editing, current enabled-state preservation, deletion during editing and feature gates; no platform effects or on-screen focus checks |
+| `screenshot-text-test` | Screenshot text acquisition with isolated capture processes: success, Escape, failures, cancellation, temporary-file cleanup and late OCR results; no live screen or clipboard access |
 | `apple-shortcut-test` | all of `AppleShortcuts/Model/` — the `shortcuts list` parser and entry ids |
 | `snippets-test` | all of `Snippets/Model/` and `Snippets/Service/`, plus editor drafts, placeholder selection and `Platform/HealthTicker.swift` |
 | `notes-test` | all of `Notes/Model/` and `Notes/Service/`, including the Markdown parser, edit plans and reveal policy, plus the real fuzzy matcher and signposts |

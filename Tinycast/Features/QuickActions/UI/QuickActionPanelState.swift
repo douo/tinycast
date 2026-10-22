@@ -31,7 +31,7 @@ final class QuickActionPanelState {
 
     var isRunning: Bool { phase == .running }
 
-    var canReplace: Bool { phase == .finished && !output.isEmpty }
+    var hasOutput: Bool { phase == .finished && !output.isEmpty }
 
     init(action: QuickAction, original: String, targetLanguage: Locale.Language) {
         self.action = action

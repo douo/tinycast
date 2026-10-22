@@ -195,6 +195,16 @@ struct QuickActionsSettingsView: View {
             } label: {
                 SettingsRowTitle(.quickActionsTranslate, "Translate to")
             }
+            if let entry = CommandCatalog.entry(for: .translateScreenshot) {
+                SettingsRow(title: entry.name, subtitle: String(localized: "Always shown in a panel")) {
+                    SymbolImage(name: CommandID.translateScreenshot.sfSymbol, size: Theme.Size.quickActionHeaderIcon)
+                        .frame(width: Theme.Size.settingsRowIcon)
+                } trailing: {
+                    AliasField(entry: entry)
+                    ShortcutRecorder(action: .command(.translateScreenshot), isQuiet: true)
+                    launcherToggle(title: entry.name, entry: entry)
+                }
+            }
         } header: {
             SettingsSectionHeader(.quickActionsTranslate)
         } footer: {

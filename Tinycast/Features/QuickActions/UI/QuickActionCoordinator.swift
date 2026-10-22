@@ -31,7 +31,7 @@ final class QuickActionCoordinator {
     private let panels = QuickActionPanelController()
     private unowned let core: AppCore
 
-    private static let launcherCommands = Set(BuiltInQuickAction.allCases.map(CommandID.init))
+    private static let launcherCommands = Set(SettingsTab.quickActions.ownedCommands)
 
     /// One at a time: two runs race for one selection, and the second overwrites the first's work.
     @ObservationIgnored private var running: Task<Void, Never>?
@@ -205,12 +205,43 @@ final class QuickActionCoordinator {
         panels.dismiss()
     }
 
+    func translateScreenshot() {
+        guard settings.quickActionsEnabled, running == nil else { return }
+        if paletteCoordinator.isVisible { paletteCoordinator.hidePalette(restoreFocus: false) }
+        panels.dismiss()
+        start { [weak self] in await self?.beginScreenshot() }
+    }
+
+    private func beginScreenshot() async {
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            guard await core.reportFailure(
+                title: String(localized: "Screen Recording permission required"),
+                message: String(localized: "Allow Tinycast to capture your screen in System Settings, then try again."),
+                symbol: "viewfinder", recovery: String(localized: "Open System Settings")),
+                !Task.isCancelled
+            else { return }
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                NSWorkspace.shared.open(url)
+            }
+            return
+        }
+        do {
+            guard let text = try await ScreenshotTextReader.read() else { return }
+            try Task.checkCancellation()
+            await process(.translate, text: try QuickActionRunner.accepted(text), target: nil)
+        } catch {
+            guard !Task.isCancelled, !(error is CancellationError) else { return }
+            core.showMessage(error.localizedDescription, tone: .danger)
+        }
+    }
+
     /// The generation stops a superseded task from clearing the newer handle as it finishes.
     private func start(_ work: @escaping @MainActor () async -> Void) {
         generation += 1
         let mine = generation
         running?.cancel()
         running = Task { [weak self] in
+            guard !Task.isCancelled else { return }
             await work()
             guard let self, mine == self.generation else { return }
             self.running = nil
@@ -227,15 +258,22 @@ final class QuickActionCoordinator {
                 selection = try QuickActionRunner.accepted(note.text)
             }
         } catch let failure as QuickActionFailure {
+            guard !Task.isCancelled else { return }
             reportRefusal(failure)
             return
         } catch {
+            guard !Task.isCancelled, !(error is CancellationError) else { return }
             core.showMessage(error.localizedDescription, tone: .danger)
             return
         }
+        guard !Task.isCancelled else { return }
+        await process(action, text: selection, target: target)
+    }
+
+    private func process(_ action: QuickAction, text: String, target: Target?) async {
         let state = QuickActionPanelState(
-            action: action, original: selection, targetLanguage: targetLanguage)
-        let previews = store.settings.previewsResult(action)
+            action: action, original: text, targetLanguage: targetLanguage)
+        let previews = target == nil || store.settings.previewsResult(action)
         if previews { present(state, target: target) }
         await perform(state, target: target, previewing: previews)
     }
@@ -264,21 +302,23 @@ final class QuickActionCoordinator {
     }
 
     private func perform(
-        _ state: QuickActionPanelState, target: Target, previewing: Bool
+        _ state: QuickActionPanelState, target: Target?, previewing: Bool
     ) async {
         do {
             let text = try await produce(state, previewing: previewing)
             guard !Task.isCancelled else { return }
             state.finish(text)
-            if previewing { return }
+            guard !previewing, let target else { return }
             deliver(text, to: target, action: state.action)
         } catch is CancellationError {
             return
         } catch let error as TextTranslator.Failure where error.needsDownload {
+            guard !Task.isCancelled else { return }
             // A HUD cannot say where the download lives, so this has to become a panel.
             if !previewing { present(state, target: target) }
             state.requireLanguageDownload()
         } catch {
+            guard !Task.isCancelled else { return }
             report(error, state: state, previewing: previewing)
         }
     }
@@ -351,7 +391,10 @@ final class QuickActionCoordinator {
         state.fail(error.localizedDescription)
     }
 
-    private func present(_ state: QuickActionPanelState, target: Target) {
+    private func present(_ state: QuickActionPanelState, target: Target?) {
+        let onReplace: ((String) -> Void)? = target.map { target in
+            { [weak self] text in self?.deliver(text, to: target, action: state.action) }
+        }
         panels.present(
             state,
             metrics: settings.interfaceSize.metrics,
@@ -360,12 +403,10 @@ final class QuickActionCoordinator {
                 state.targetLanguage = language
                 self?.rerun(state, target: target)
             },
-            onReplace: { [weak self] text in
-                self?.deliver(text, to: target, action: state.action)
-            })
+            onReplace: onReplace)
     }
 
-    private func rerun(_ state: QuickActionPanelState, target: Target) {
+    private func rerun(_ state: QuickActionPanelState, target: Target?) {
         state.restart()
         start { [weak self] in await self?.perform(state, target: target, previewing: true) }
     }

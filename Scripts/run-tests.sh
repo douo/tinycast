@@ -210,6 +210,10 @@ run clipboard-text-test    Tinycast/Features/Clipboard/Model/*.swift Tinycast/Pl
                            Tinycast/Features/Clipboard/Service/ClipboardTextIndexer.swift \
                            Tinycast/Features/Clipboard/Service/ClipboardTextWorker.swift \
                            Tinycast/Platform/ProcessExit.swift
+run screenshot-text-test   Tinycast/Features/Clipboard/Model/*.swift Tinycast/Platform/Images/ImageDerivative.swift $Q \
+                           Tinycast/Features/Clipboard/Service/ClipboardTextWorker.swift \
+                           Tinycast/Features/QuickActions/Service/ScreenshotTextReader.swift \
+                           Tinycast/Platform/ProcessExit.swift
 run pasteboard-test        Tinycast/Platform/PasteboardFiles.swift \
                            Tinycast/Features/Clipboard/Model/ClipboardStore.swift \
                            Tinycast/Platform/Images/ImageDerivative.swift \
