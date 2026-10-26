@@ -104,7 +104,7 @@ struct WindowCommandTests {
         testLargerSmaller()
         testNudges()
         testDisplays()
-        testMaximizedDisplays()
+        testDisplayOccupancy()
         testDisplayCycle()
         testRestore()
         testMemory()
@@ -701,7 +701,7 @@ struct WindowCommandTests {
             "a window off every display still resolves to one")
     }
 
-    static func testMaximizedDisplays() {
+    static func testDisplayOccupancy() {
         let laptop = WindowPlacementEngine.Screen(
             id: 1, frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
             visibleFrame: CGRect(x: 0, y: 25, width: 1440, height: 825))
@@ -721,7 +721,7 @@ struct WindowCommandTests {
                         moved.frame, expected,
                         "\(command.rawValue) keeps Maximize on display \(destination.id), gap \(gap)")
                     expect(moved.screenID == destination.id, "Maximize moves to the other display")
-                    expect(moved.anchor == .topLeading, "a maximized move keeps Maximize's anchor")
+                    expect(moved.anchor == .centered, "display moves use the proportional anchor")
                     expectRect(
                         frame(command, window: moved.frame, gap: gap, allScreens: both)!,
                         maximized, "repeated display moves round-trip Maximize without gap drift")
@@ -735,12 +735,42 @@ struct WindowCommandTests {
             frame(.nextDisplay, window: laptop.visibleFrame, gap: 12, allScreens: both)!,
             expected, "a window maximized outside Tinycast adopts the destination's gap")
 
-        let adjusted = CGRect(
-            x: maximized.minX + 1, y: maximized.minY - 1,
-            width: maximized.width - 2, height: maximized.height + 2)
+        let adjusted = CGRect(x: 12, y: 37, width: 1410, height: 795)
         expectRect(
             frame(.nextDisplay, window: adjusted, gap: 12, allScreens: both)!,
-            expected, "small app-imposed frame differences still preserve Maximize")
+            CGRect(x: -2488, y: -504, width: 2466, height: 1382),
+            "an app-adjusted window keeps its actual occupancy without a Maximize flag")
+
+        let proportionalSource = WindowPlacementEngine.Screen(
+            id: 3, frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1440, height: 900))
+        let proportionalTarget = WindowPlacementEngine.Screen(
+            id: 4, frame: CGRect(x: -2500, y: -500, width: 2500, height: 1440),
+            visibleFrame: CGRect(x: -2500, y: -475, width: 2500, height: 1400))
+        let proportionalScreens = screens(proportionalSource, proportionalTarget)
+        let half = CGRect(x: 370, y: 235, width: 700, height: 430)
+        let transferredHalf = CGRect(x: -1865, y: -115, width: 1230, height: 680)
+        for command in [WindowCommand.ID.nextDisplay, .previousDisplay] {
+            expectRect(
+                frame(command, window: half, gap: 20, allScreens: proportionalScreens)!,
+                transferredHalf, "half the usable canvas stays half on the other display")
+            expectRect(
+                frame(command, window: transferredHalf, gap: 20, allScreens: proportionalScreens)!,
+                half, "a proportional window round-trips with a fixed point gap")
+        }
+
+        let tiny = WindowPlacementEngine.Screen(
+            id: 5, frame: CGRect(x: 0, y: 0, width: 100, height: 200),
+            visibleFrame: CGRect(x: 0, y: 0, width: 100, height: 200))
+        let large = WindowPlacementEngine.Screen(
+            id: 6, frame: CGRect(x: 100, y: 0, width: 800, height: 600),
+            visibleFrame: CGRect(x: 100, y: 0, width: 800, height: 600))
+        expectRect(
+            frame(
+                .nextDisplay, window: CGRect(x: 10, y: 10, width: 80, height: 180),
+                gap: 1000, allScreens: screens(tiny, large))!,
+            CGRect(x: 160, y: 60, width: 680, height: 480),
+            "each display sanitizes its own gap before transferring occupancy")
 
         for command in [WindowCommand.ID.almostMaximize, .maximizeWidth, .maximizeHeight] {
             let partial = frame(command, on: laptop, gap: 12)!

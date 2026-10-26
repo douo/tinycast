@@ -146,6 +146,7 @@ enum AXWindowAccess {
             || abs(actual.minY - target.minY) > clampTolerance
         {
             _ = setPosition(target.origin, on: window)
+            _ = setSize(target.size, on: window)
             actual = frame(of: window) ?? actual
         }
 
