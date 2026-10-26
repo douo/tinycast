@@ -64,8 +64,8 @@ same at two thirds of the width.
 A window that's too large or partly off-screen is always moved back onto the display. The usable
 area already excludes the menu bar, the Dock and the notch.
 
-**Move to Next/Previous Display** keeps a maximized window maximized on the destination display,
-with the configured gap. This also works for windows maximized outside Tinycast.
+**Move to Next/Previous Display** keeps the window's relative position and size within the usable
+area, with the configured gap. A window filling one display fills the next display too.
 
 ## Cycling and Restore
 
