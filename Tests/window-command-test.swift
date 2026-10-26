@@ -104,6 +104,7 @@ struct WindowCommandTests {
         testLargerSmaller()
         testNudges()
         testDisplays()
+        testMaximizedDisplays()
         testDisplayCycle()
         testRestore()
         testMemory()
@@ -698,6 +699,65 @@ struct WindowCommandTests {
             WindowPlacementEngine.screen(
                 containing: CGRect(x: -5000, y: -5000, width: 100, height: 100), in: both) != nil,
             "a window off every display still resolves to one")
+    }
+
+    static func testMaximizedDisplays() {
+        let laptop = WindowPlacementEngine.Screen(
+            id: 1, frame: CGRect(x: 0, y: 0, width: 1440, height: 900),
+            visibleFrame: CGRect(x: 0, y: 25, width: 1440, height: 825))
+        let external = WindowPlacementEngine.Screen(
+            id: 2, frame: CGRect(x: -2560, y: -540, width: 2560, height: 1440),
+            visibleFrame: CGRect(x: -2500, y: -516, width: 2500, height: 1416))
+        let both = screens(laptop, external)
+
+        for gap: CGFloat in [0, 12, 12.5, 64] {
+            for (source, destination) in [(laptop, external), (external, laptop)] {
+                let maximized = frame(.maximize, on: source, gap: gap)!
+                let expected = frame(.maximize, on: destination, gap: gap)!
+                for command in [WindowCommand.ID.nextDisplay, .previousDisplay] {
+                    let moved = placement(
+                        command, window: maximized, gap: gap, allScreens: both)!
+                    expectRect(
+                        moved.frame, expected,
+                        "\(command.rawValue) keeps Maximize on display \(destination.id), gap \(gap)")
+                    expect(moved.screenID == destination.id, "Maximize moves to the other display")
+                    expect(moved.anchor == .topLeading, "a maximized move keeps Maximize's anchor")
+                    expectRect(
+                        frame(command, window: moved.frame, gap: gap, allScreens: both)!,
+                        maximized, "repeated display moves round-trip Maximize without gap drift")
+                }
+            }
+        }
+
+        let maximized = frame(.maximize, on: laptop, gap: 12)!
+        let expected = CGRect(x: -2488, y: -504, width: 2476, height: 1392)
+        expectRect(
+            frame(.nextDisplay, window: laptop.visibleFrame, gap: 12, allScreens: both)!,
+            expected, "a window maximized outside Tinycast adopts the destination's gap")
+
+        let adjusted = CGRect(
+            x: maximized.minX + 1, y: maximized.minY - 1,
+            width: maximized.width - 2, height: maximized.height + 2)
+        expectRect(
+            frame(.nextDisplay, window: adjusted, gap: 12, allScreens: both)!,
+            expected, "small app-imposed frame differences still preserve Maximize")
+
+        for command in [WindowCommand.ID.almostMaximize, .maximizeWidth, .maximizeHeight] {
+            let partial = frame(command, on: laptop, gap: 12)!
+            expect(
+                frame(.nextDisplay, window: partial, gap: 12, allScreens: both)! != expected,
+                "\(command.rawValue) is not promoted to Maximize by a display move")
+        }
+
+        let resized = CGRect(
+            x: maximized.minX, y: maximized.minY,
+            width: maximized.width - 3, height: maximized.height)
+        expect(
+            frame(.nextDisplay, window: resized, gap: 12, allScreens: both)! != expected,
+            "a resize beyond the tolerance is not treated as Maximize")
+        expect(
+            frame(.nextDisplay, window: maximized, gap: 12, allScreens: [laptop]) == nil,
+            "Maximize does not change the single-display no-op")
     }
 
     // MARK: - Cycling across displays

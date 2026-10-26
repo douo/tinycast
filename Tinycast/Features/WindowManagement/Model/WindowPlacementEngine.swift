@@ -228,11 +228,28 @@ enum WindowPlacementEngine {
         else { return nil }
         let offset = input.command == .nextDisplay ? 1 : -1
         let destination = ordered[(index + offset + ordered.count) % ordered.count]
+        let sourceCanvas = canvas(host.visibleFrame, gap: gap)
+        if isMaximized(input.windowFrame, in: sourceCanvas)
+            || isMaximized(input.windowFrame, in: host.visibleFrame)
+        {
+            let destinationGap = sanitizedGap(input.gap, in: destination.visibleFrame)
+            return Placement(
+                frame: canvas(destination.visibleFrame, gap: destinationGap),
+                screenID: destination.id, anchor: .topLeading, resizes: true)
+        }
         let frame = moved(
             input.windowFrame, from: host, to: destination, gap: gap,
             lastTile: input.lastTileCommand)
         return Placement(
             frame: frame, screenID: destination.id, anchor: .centered, resizes: true)
+    }
+
+    private static func isMaximized(_ frame: CGRect, in canvas: CGRect) -> Bool {
+        let tolerance: CGFloat = 2
+        return abs(frame.minX - canvas.minX) <= tolerance
+            && abs(frame.minY - canvas.minY) <= tolerance
+            && abs(frame.maxX - canvas.maxX) <= tolerance
+            && abs(frame.maxY - canvas.maxY) <= tolerance
     }
 
     private static func moved(
