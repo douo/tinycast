@@ -55,6 +55,19 @@ enum AXWindowAccess {
         return (value as? Bool) ?? false
     }
 
+    static func setFullScreen(_ enabled: Bool, on window: AXUIElement) -> Bool {
+        if isFullScreen(window) == enabled { return true }
+        if isSettable(fullScreenAttribute as String, on: window),
+            AXUIElementSetAttributeValue(
+                window, fullScreenAttribute, enabled ? kCFBooleanTrue : kCFBooleanFalse) == .success
+        {
+            return true
+        }
+        guard let button = element(window, fullScreenButtonAttribute as String) else { return false }
+        AXUIElementSetMessagingTimeout(button, messagingTimeout)
+        return AXUIElementPerformAction(button, kAXPressAction as CFString) == .success
+    }
+
     // MARK: - Bringing one forward
 
     static func unminimize(_ window: AXUIElement) -> Bool {

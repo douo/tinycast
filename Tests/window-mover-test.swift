@@ -48,7 +48,15 @@ enum AXWindowAccess {
     static var clipsEveryWrite = false
     static var displayReadyAt: ContinuousClock.Instant?
     static var canResize = true
+    static var canMove = true
     static var fullScreen = false
+    static var fullScreenRequests: [Bool] = []
+    static var refusesFullScreen = false
+    static var ignoresFullScreen = false
+    static var refusesMove = false
+    static var transitionDelay: Duration = .milliseconds(60)
+    static var transition: (ready: ContinuousClock.Instant, fullScreen: Bool, frame: CGRect)?
+    static var normalFrame = AXScreens.source.visibleFrame
 
     static func reset() {
         current = AXScreens.source.visibleFrame
@@ -57,19 +65,52 @@ enum AXWindowAccess {
         clipsEveryWrite = false
         displayReadyAt = nil
         canResize = true
+        canMove = true
         fullScreen = false
+        fullScreenRequests = []
+        refusesFullScreen = false
+        ignoresFullScreen = false
+        refusesMove = false
+        transitionDelay = .milliseconds(60)
+        transition = nil
+        normalFrame = AXScreens.source.visibleFrame
         AXScreens.screens = [AXScreens.source, AXScreens.destination]
     }
 
     static func application(for pid: pid_t) -> AXUIElement { window }
     static func targetWindow(in application: AXUIElement) -> AXUIElement? { window }
-    static func frame(of window: AXUIElement) -> CGRect? { current }
-    static func isFullScreen(_ window: AXUIElement) -> Bool { fullScreen }
+    static func frame(of window: AXUIElement) -> CGRect? {
+        finishTransition()
+        return current
+    }
+    static func isFullScreen(_ window: AXUIElement) -> Bool {
+        finishTransition()
+        return fullScreen
+    }
+    static func setFullScreen(_ enabled: Bool, on window: AXUIElement) -> Bool {
+        fullScreenRequests.append(enabled)
+        guard !refusesFullScreen else { return false }
+        guard !ignoresFullScreen, let current,
+            let display = WindowPlacementEngine.screen(containing: current, in: AXScreens.screens)
+        else { return true }
+        if enabled { normalFrame = current }
+        transition = (
+            .now.advanced(by: transitionDelay), enabled, enabled ? display.frame : normalFrame)
+        return true
+    }
+    static func finishTransition() {
+        guard let transition, ContinuousClock.now >= transition.ready else { return }
+        if current != nil {
+            fullScreen = transition.fullScreen
+            current = transition.frame
+        }
+        self.transition = nil
+    }
     static func element(_ window: AXUIElement, _ attribute: String) -> AXUIElement? { nil }
     static func suppressEnhancedUserInterface(on application: AXUIElement) -> () -> Void { {} }
 
     static func isSettable(_ attribute: String, on window: AXUIElement) -> Bool {
-        attribute == kAXPositionAttribute || (attribute == kAXSizeAttribute && canResize)
+        (attribute == kAXPositionAttribute && canMove) || (attribute == kAXSizeAttribute && canResize)
     }
 
     static func write(
@@ -77,6 +118,7 @@ enum AXWindowAccess {
         current: CGRect, canResize: Bool, canvas: CGRect?
     ) -> CGRect? {
         writes += 1
+        if refusesMove { return current }
         var frame = canResize ? target : anchor.place(current.size, in: target)
         if writes == 1, clipsFirstWrite {
             displayReadyAt = .now.advanced(by: .milliseconds(40))
@@ -109,6 +151,16 @@ struct WindowMoverTests {
         expect(
             mover.perform(.nextDisplay, target: target, gap: 0, cycle: .off),
             "the initial transfer returns synchronously")
+    }
+
+    static func prepareFullScreen() {
+        AXWindowAccess.reset()
+        AXWindowAccess.fullScreen = true
+        AXWindowAccess.current = AXScreens.source.frame
+    }
+
+    static func settleFullScreen() async {
+        do { try await Task.sleep(for: .milliseconds(1550)) } catch { preconditionFailure() }
     }
 
     static func main() async {
@@ -224,6 +276,151 @@ struct WindowMoverTests {
         released = nil
         await settle()
         expect(AXWindowAccess.writes == 1, "destroying the mover cancels its pending correction")
+
+        prepareFullScreen()
+        let transfer = WindowMover()
+        move(transfer, target: target)
+        expect(AXWindowAccess.writes == 0, "a fullscreen transfer waits before writing geometry")
+        expect(AXWindowAccess.fullScreenRequests == [false], "the transfer first exits native fullscreen")
+        expect(
+            !transfer.perform(.nextDisplay, target: target, gap: 0, cycle: .off),
+            "a repeated display command does not interrupt a fullscreen transition")
+        await settleFullScreen()
+        expect(AXWindowAccess.fullScreen, "the transferred window is natively fullscreen")
+        expect(AXWindowAccess.current == AXScreens.destination.frame, "fullscreen fills the destination")
+        expect(AXWindowAccess.fullScreenRequests == [false, true], "the transfer enters fullscreen once")
+        expect(AXWindowAccess.writes == 2, "a fullscreen transfer corrects a clipped resize once")
+        expect(
+            transfer.perform(.previousDisplay, target: target, gap: 0, cycle: .off),
+            "the reverse transfer starts after the first finishes")
+        await settleFullScreen()
+        expect(AXWindowAccess.fullScreen, "the reverse transfer also preserves native fullscreen")
+        expect(AXWindowAccess.current == AXScreens.source.frame, "the reverse transfer fills the source")
+        _ = AXWindowAccess.setFullScreen(false, on: AXWindowAccess.window)
+        await settle()
+        _ = AXWindowAccess.isFullScreen(AXWindowAccess.window)
+        _ = transfer.perform(.reasonableSize, target: target, gap: 0, cycle: .off)
+        expect(
+            transfer.perform(.restore, target: target, gap: 0, cycle: .off),
+            "fullscreen transfers retain the original Restore point")
+        expect(AXWindowAccess.current == AXScreens.source.visibleFrame, "Restore uses ordinary geometry")
+
+        prepareFullScreen()
+        AXScreens.screens = [AXScreens.source]
+        expect(
+            !WindowMover().perform(.nextDisplay, target: target, gap: 0, cycle: .off),
+            "one display leaves native fullscreen untouched")
+        expect(AXWindowAccess.fullScreenRequests.isEmpty, "one display never exits fullscreen")
+
+        prepareFullScreen()
+        AXWindowAccess.refusesFullScreen = true
+        let refused = WindowMover()
+        expect(
+            !refused.perform(.nextDisplay, target: target, gap: 0, cycle: .off),
+            "a refused fullscreen exit is reported synchronously")
+        expect(AXWindowAccess.writes == 0, "a refused fullscreen exit writes no geometry")
+
+        prepareFullScreen()
+        let disconnected = WindowMover()
+        move(disconnected, target: target)
+        AXScreens.screens = [AXScreens.source]
+        await settleFullScreen()
+        expect(AXWindowAccess.writes == 0, "disconnecting a display prevents fullscreen geometry writes")
+        expect(
+            AXWindowAccess.isFullScreen(AXWindowAccess.window),
+            "a disconnected transfer restores fullscreen on the current display")
+
+        prepareFullScreen()
+        AXWindowAccess.canMove = false
+        let immovable = WindowMover()
+        move(immovable, target: target)
+        await settleFullScreen()
+        expect(AXWindowAccess.writes == 0, "an immovable fullscreen window gets no geometry writes")
+        expect(AXWindowAccess.isFullScreen(AXWindowAccess.window), "an immovable window returns to native fullscreen")
+
+        prepareFullScreen()
+        AXWindowAccess.refusesMove = true
+        let unresponsive = WindowMover()
+        move(unresponsive, target: target)
+        await settleFullScreen()
+        expect(AXWindowAccess.isFullScreen(AXWindowAccess.window), "a refused display move returns to native fullscreen")
+        expect(AXWindowAccess.current == AXScreens.source.frame, "a refused move remains on its source")
+
+        prepareFullScreen()
+        let interrupted = WindowMover()
+        move(interrupted, target: target)
+        await settle()
+        _ = interrupted.perform(.reasonableSize, target: target, gap: 0, cycle: .off)
+        let interruptedFrame = AXWindowAccess.current
+        await settleFullScreen()
+        expect(AXWindowAccess.current == interruptedFrame, "a newer command cancels fullscreen transfer")
+        expect(AXWindowAccess.fullScreenRequests == [false], "a superseded transfer never reenters fullscreen")
+
+        prepareFullScreen()
+        let customInterrupted = WindowMover()
+        move(customInterrupted, target: target)
+        await settle()
+        _ = customInterrupted.perform(CustomWindowSize(), target: target, gap: 0)
+        let customFrame = AXWindowAccess.current
+        await settleFullScreen()
+        expect(AXWindowAccess.current == customFrame, "a custom size supersedes fullscreen transfer")
+
+        prepareFullScreen()
+        let closedFullScreen = WindowMover()
+        move(closedFullScreen, target: target)
+        AXWindowAccess.current = nil
+        await settleFullScreen()
+        expect(AXWindowAccess.writes == 0, "a closed fullscreen window never receives geometry")
+        expect(AXWindowAccess.fullScreenRequests == [false], "a closed window is never toggled again")
+
+        prepareFullScreen()
+        var releasedFullScreen: WindowMover? = WindowMover()
+        move(releasedFullScreen!, target: target)
+        releasedFullScreen = nil
+        await settleFullScreen()
+        expect(AXWindowAccess.writes == 0, "destroying the mover cancels fullscreen transfer")
+        expect(AXWindowAccess.fullScreenRequests == [false], "owner teardown never starts a later transition")
+
+        prepareFullScreen()
+        let changedInsets = WindowMover()
+        move(changedInsets, target: target)
+        AXScreens.screens[0] = .init(
+            id: AXScreens.source.id, frame: AXScreens.source.frame,
+            visibleFrame: AXScreens.source.frame)
+        await settleFullScreen()
+        expect(AXWindowAccess.fullScreen, "menu bar visibility changes do not cancel a fullscreen transfer")
+        expect(AXWindowAccess.current == AXScreens.destination.frame, "the display identity ignores usable insets")
+
+        prepareFullScreen()
+        let userMoved = WindowMover()
+        move(userMoved, target: target)
+        let moveDeadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while AXWindowAccess.writes < 2, ContinuousClock.now < moveDeadline {
+            do { try await Task.sleep(for: .milliseconds(10)) } catch { preconditionFailure() }
+        }
+        AXWindowAccess.current?.origin.x += 20
+        let draggedFrame = AXWindowAccess.current
+        await settleFullScreen()
+        expect(AXWindowAccess.current == draggedFrame, "a drag during transfer is not overwritten")
+        expect(AXWindowAccess.fullScreenRequests == [false], "a drag cancels automatic fullscreen entry")
+
+        prepareFullScreen()
+        AXWindowAccess.transitionDelay = .milliseconds(700)
+        let slow = WindowMover()
+        move(slow, target: target)
+        await settle()
+        expect(AXWindowAccess.writes == 0, "slow native fullscreen exits do not receive early writes")
+        do { try await Task.sleep(for: .milliseconds(2400)) } catch { preconditionFailure() }
+        expect(AXWindowAccess.fullScreen, "slow transitions complete in native fullscreen")
+        expect(AXWindowAccess.current == AXScreens.destination.frame, "slow transitions reach the destination")
+
+        prepareFullScreen()
+        AXWindowAccess.ignoresFullScreen = true
+        let ignored = WindowMover()
+        move(ignored, target: target)
+        do { try await Task.sleep(for: .milliseconds(5300)) } catch { preconditionFailure() }
+        expect(AXWindowAccess.writes == 0, "an accepted but ignored fullscreen exit times out without geometry")
+        expect(AXWindowAccess.fullScreen, "an ignored fullscreen exit never changes the display")
 
         print("\(passes) passed, \(failures) failed")
         if failures > 0 { exit(1) }

@@ -100,6 +100,13 @@ something else, and triggering the wrong command would be worse than doing nothi
 
 It resets the cycle but keeps the Restore point.
 
+**Move to Next Display** and **Move to Previous Display** also work in native fullscreen. The
+window briefly exits fullscreen, moves to the destination, then enters macOS fullscreen there and
+fills that display. The system transition animations remain visible.
+
+Presses during a fullscreen transfer are ignored. Another window command cancels the transfer.
+With only one display connected, the window stays fullscreen where it is.
+
 ## Spaces
 
 **Switch to Previous Space** and **Switch to Next Space** switch between macOS Spaces
@@ -114,8 +121,9 @@ never skips too far. At the first or last Space, macOS behaves as it normally do
 
 ## When a window won't move
 
-Minimized windows, sheets, popovers, windows already in native fullscreen, and windows that don't
-report a position or size are skipped.
+Minimized windows, sheets, popovers, and windows that don't report a position or size are skipped.
+Native fullscreen windows support display moves and Toggle Fullscreen; other sizing and positioning
+commands leave them alone.
 
 A window that can't be resized, like System Information, is left where it is instead of being
 partly moved. If an app won't let its window shrink, Tinycast aligns the window to the correct side

@@ -55,10 +55,23 @@ final class WindowMover {
             }
         }
 
+        func setFullScreen(_ enabled: Bool) -> Bool {
+            switch self {
+            case .external(_, let window):
+                return AXWindowAccess.setFullScreen(enabled, on: window)
+            case .own(let window):
+                guard window.styleMask.contains(.resizable),
+                    window.collectionBehavior.isDisjoint(with: [.fullScreenAuxiliary, .fullScreenNone])
+                else { return false }
+                if isFullScreen != enabled { window.toggleFullScreen(nil) }
+                return true
+            }
+        }
+
         func frame(in geometry: AXGeometry) -> CGRect? {
             switch self {
             case .external(_, let window): AXWindowAccess.frame(of: window)
-            case .own(let window): geometry.flip(window.frame)
+            case .own(let window): window.isVisible ? geometry.flip(window.frame) : nil
             }
         }
 
@@ -116,6 +129,8 @@ final class WindowMover {
     private var windowCloseToken: NotificationToken?
     private var displayResize: Task<Void, Never>?
     private var displayResizeID: UUID?
+    private var fullScreenTransfer: Task<Void, Never>?
+    private var fullScreenTransferID: UUID?
     private static let logger = Logger(subsystem: "com.tinycast", category: "WindowManagement")
 
     init() {
@@ -150,6 +165,7 @@ final class WindowMover {
 
     isolated deinit {
         displayResize?.cancel()
+        fullScreenTransfer?.cancel()
     }
 
     /// The window a command targets, resolved once per press.
@@ -168,16 +184,23 @@ final class WindowMover {
     func perform(
         _ command: WindowCommand.ID, target: WindowTarget?, gap: CGFloat, cycle: WindowCycle
     ) -> Bool {
+        if fullScreenTransfer != nil, command == .nextDisplay || command == .previousDisplay {
+            return false
+        }
         cancelDisplayResize()
+        cancelFullScreenTransfer()
         guard let catalogued = WindowCommandCatalog.command(id: command),
             let focused = focusedWindow(of: target)
         else { return false }
 
         if catalogued.kind == .fullscreen {
-            guard toggleFullScreen(focused.surface) else { return false }
+            guard focused.surface.setFullScreen(!focused.surface.isFullScreen) else { return false }
             // The size chain is moot, but the pre-Tinycast frame is still the Restore target.
             memory.forgetCycle(key: focused.key)
             return true
+        }
+        if focused.surface.isFullScreen, command == .nextDisplay || command == .previousDisplay {
+            return moveFullScreen(focused, command: command, gap: gap)
         }
         return place(
             focused, command: command, gap: gap,
@@ -198,6 +221,7 @@ final class WindowMover {
     @discardableResult
     func perform(_ size: CustomWindowSize, target: WindowTarget?, gap: CGFloat) -> Bool {
         cancelDisplayResize()
+        cancelFullScreenTransfer()
         guard let focused = focusedWindow(of: target) else { return false }
         return place(
             focused, command: nil, gap: gap, cycleLength: { _ in 1 },
@@ -340,31 +364,182 @@ final class WindowMover {
 
     // MARK: - Fullscreen
 
-    /// `AXFullScreen`, then the green button. docs/features/window-management.md
-    private func toggleFullScreen(_ surface: Surface) -> Bool {
-        switch surface {
-        case .own(let window):
-            // AppKit fullscreens any resizable window unless it opts out, as the Notes panel does.
-            guard window.styleMask.contains(.resizable),
-                window.collectionBehavior.isDisjoint(with: [.fullScreenAuxiliary, .fullScreenNone])
-            else { return false }
-            window.toggleFullScreen(nil)
-            return true
-        case .external(_, let window):
-            let target: CFBoolean =
-                AXWindowAccess.isFullScreen(window) ? kCFBooleanFalse : kCFBooleanTrue
-            if AXWindowAccess.isSettable(
-                AXWindowAccess.fullScreenAttribute as String, on: window),
-                AXUIElementSetAttributeValue(
-                    window, AXWindowAccess.fullScreenAttribute, target) == .success
-            {
-                return true
+    private func cancelFullScreenTransfer() {
+        fullScreenTransfer?.cancel()
+        fullScreenTransfer = nil
+        fullScreenTransferID = nil
+    }
+
+    private func moveFullScreen(
+        _ focused: FocusedWindow, command: WindowCommand.ID, gap: CGFloat
+    ) -> Bool {
+        let systemScreens = NSScreen.screens
+        let geometry = AXGeometry(screens: systemScreens)
+        let screens = AXScreens.converted(systemScreens, geometry: geometry)
+        guard let current = focused.surface.frame(in: geometry),
+            let source = WindowPlacementEngine.screen(containing: current, in: screens),
+            let placement = WindowPlacementEngine.placement(
+                for: .init(command: command, windowFrame: current, screens: screens, gap: gap)),
+            placement.screenID != source.id, focused.surface.setFullScreen(false)
+        else { return false }
+
+        memory.forgetCycle(key: focused.key)
+        let id = UUID()
+        fullScreenTransferID = id
+        Self.logger.debug("Moving fullscreen from display \(source.id) to \(placement.screenID)")
+        let transfer = FullScreenTransfer(
+            surface: focused.surface, command: command, gap: gap, displays: screens,
+            sourceID: source.id, destinationID: placement.screenID)
+        fullScreenTransfer = Task { @MainActor [weak self] in
+            let result = await transfer.run { [weak self] in self?.fullScreenTransferID == id }
+            guard let self, self.fullScreenTransferID == id else { return }
+            self.fullScreenTransfer = nil
+            self.fullScreenTransferID = nil
+            guard let result else { return }
+            let now = Date()
+            let decision = self.memory.decide(
+                key: focused.key, command: command, currentFrame: result.original,
+                currentScreenID: transfer.sourceID, cycleLength: 1, now: now)
+            self.memory.commit(
+                key: focused.key, command: command, decision: decision, appliedFrame: result.applied,
+                screenID: transfer.destinationID, now: now)
+            Self.logger.debug("Fullscreen moved to display \(transfer.destinationID)")
+        }
+        return true
+    }
+
+    @MainActor
+    private struct FullScreenTransfer {
+        let surface: Surface
+        let command: WindowCommand.ID
+        let gap: CGFloat
+        let displays: [WindowPlacementEngine.Screen]
+        let sourceID: Int
+        let destinationID: Int
+
+        func run(isCurrent: () -> Bool) async -> (original: CGRect, applied: CGRect)? {
+            guard let original = await settledFrame(
+                fullScreen: false, displayID: sourceID, delay: .milliseconds(500), isCurrent: isCurrent)
+            else {
+                restoreFullScreen(isCurrent: isCurrent)
+                return nil
             }
-            guard
-                let button = AXWindowAccess.element(
-                    window, AXWindowAccess.fullScreenButtonAttribute as String)
-            else { return false }
-            return AXUIElementPerformAction(button, kAXPressAction as CFString) == .success
+            let (screens, geometry) = environment()
+            WindowMover.logger.debug("Exited fullscreen: \(NSStringFromRect(original), privacy: .public)")
+            guard valid(screens, isCurrent: isCurrent), surface.canMove, surface.canResize,
+                let placement = WindowPlacementEngine.placement(
+                    for: .init(command: command, windowFrame: original, screens: screens, gap: gap)),
+                placement.screenID == destinationID,
+                let destination = screens.first(where: { $0.id == destinationID })
+            else {
+                restoreFullScreen(isCurrent: isCurrent)
+                return nil
+            }
+            let canvas = WindowPlacementEngine.canvas(
+                destination.visibleFrame,
+                gap: WindowPlacementEngine.sanitizedGap(gap, in: destination.visibleFrame))
+            guard var applied = write(placement, current: original, canvas: canvas, geometry: geometry)
+            else {
+                restoreFullScreen(isCurrent: isCurrent)
+                return nil
+            }
+
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return nil }
+            let (landedScreens, landedGeometry) = environment()
+            guard valid(landedScreens, isCurrent: isCurrent) else {
+                restoreFullScreen(isCurrent: isCurrent)
+                return nil
+            }
+            guard !surface.isFullScreen,
+                let current = surface.frame(in: landedGeometry), current.equalTo(applied)
+            else { return nil }
+            guard WindowPlacementEngine.screen(containing: current, in: landedScreens)?.id == destinationID
+            else {
+                restoreFullScreen(isCurrent: isCurrent)
+                return nil
+            }
+            if case .external = surface,
+                applied.width < placement.frame.width - AXWindowAccess.clampTolerance
+                    || applied.height < placement.frame.height - AXWindowAccess.clampTolerance,
+                surface.canMove, surface.canResize,
+                let corrected = write(placement, current: current, canvas: canvas, geometry: landedGeometry)
+            {
+                applied = corrected
+            }
+            guard let settled = await settledFrame(
+                fullScreen: false, displayID: destinationID, delay: .milliseconds(150),
+                isCurrent: isCurrent)
+            else {
+                if !valid(environment().0, isCurrent: isCurrent) {
+                    restoreFullScreen(isCurrent: isCurrent)
+                }
+                return nil
+            }
+            guard settled.equalTo(applied), surface.setFullScreen(true) else { return nil }
+            WindowMover.logger.debug("Entering fullscreen after move: \(NSStringFromRect(settled), privacy: .public)")
+            guard await settledFrame(
+                fullScreen: true, displayID: destinationID, delay: .milliseconds(500),
+                isCurrent: isCurrent) != nil
+            else { return nil }
+            return (original, applied)
+        }
+
+        private func environment() -> ([WindowPlacementEngine.Screen], AXGeometry) {
+            let systemScreens = NSScreen.screens
+            let geometry = AXGeometry(screens: systemScreens)
+            return (AXScreens.converted(systemScreens, geometry: geometry), geometry)
+        }
+
+        private func valid(_ screens: [WindowPlacementEngine.Screen], isCurrent: () -> Bool) -> Bool {
+            !Task.isCancelled && isCurrent() && screens.count == displays.count
+                && displays.allSatisfy { display in
+                    screens.contains { $0.id == display.id && $0.frame == display.frame }
+                }
+        }
+
+        private func settledFrame(
+            fullScreen: Bool, displayID: Int, delay: Duration, isCurrent: () -> Bool
+        ) async -> CGRect? {
+            let started = ContinuousClock.now
+            let deadline = started.advanced(by: .seconds(5))
+            var previous: CGRect?
+            var stableSince = started
+            while ContinuousClock.now < deadline {
+                let (screens, geometry) = environment()
+                guard valid(screens, isCurrent: isCurrent), let frame = surface.frame(in: geometry)
+                else { return nil }
+                let now = ContinuousClock.now
+                if surface.isFullScreen != fullScreen || previous != frame {
+                    stableSince = now
+                }
+                previous = frame
+                if surface.isFullScreen == fullScreen,
+                    WindowPlacementEngine.screen(containing: frame, in: screens)?.id == displayID,
+                    now - started >= delay, now - stableSince >= .milliseconds(150)
+                {
+                    return frame
+                }
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { return nil }
+            }
+            WindowMover.logger.debug("Fullscreen display transfer timed out")
+            return nil
+        }
+
+        private func write(
+            _ placement: WindowPlacementEngine.Placement, current: CGRect, canvas: CGRect,
+            geometry: AXGeometry
+        ) -> CGRect? {
+            let restoreEnhancedUI = surface.suppressEnhancedUserInterface()
+            defer { restoreEnhancedUI() }
+            return surface.write(
+                placement, current: current, canResize: true, canvas: canvas, geometry: geometry)
+        }
+
+        private func restoreFullScreen(isCurrent: () -> Bool) {
+            guard !Task.isCancelled, isCurrent(),
+                surface.frame(in: environment().1) != nil
+            else { return }
+            _ = surface.setFullScreen(true)
         }
     }
 }
