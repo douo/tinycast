@@ -1,5 +1,6 @@
 import AppKit
 @preconcurrency import ApplicationServices
+import OSLog
 
 /// Applies window commands over AX. See docs/features/window-management.md#applying-a-placement.
 @MainActor
@@ -113,6 +114,9 @@ final class WindowMover {
     private var memory = WindowActionMemory<WindowKey>()
     private var terminationToken: NotificationToken?
     private var windowCloseToken: NotificationToken?
+    private var displayResize: Task<Void, Never>?
+    private var displayResizeID: UUID?
+    private static let logger = Logger(subsystem: "com.tinycast", category: "WindowManagement")
 
     init() {
         // Drop a quit app's windows rather than waiting for LRU eviction to reclaim them.
@@ -144,6 +148,10 @@ final class WindowMover {
         windowCloseToken = NotificationToken(closeToken, center: .default)
     }
 
+    isolated deinit {
+        displayResize?.cancel()
+    }
+
     /// The window a command targets, resolved once per press.
     private struct FocusedWindow {
         let surface: Surface
@@ -160,6 +168,7 @@ final class WindowMover {
     func perform(
         _ command: WindowCommand.ID, target: WindowTarget?, gap: CGFloat, cycle: WindowCycle
     ) -> Bool {
+        cancelDisplayResize()
         guard let catalogued = WindowCommandCatalog.command(id: command),
             let focused = focusedWindow(of: target)
         else { return false }
@@ -188,6 +197,7 @@ final class WindowMover {
     /// Applies `size` to `target`'s focused window; Restore undoes it like any command.
     @discardableResult
     func perform(_ size: CustomWindowSize, target: WindowTarget?, gap: CGFloat) -> Bool {
+        cancelDisplayResize()
         guard let focused = focusedWindow(of: target) else { return false }
         return place(
             focused, command: nil, gap: gap, cycleLength: { _ in 1 },
@@ -226,11 +236,12 @@ final class WindowMover {
         cycleLength: ([WindowPlacementEngine.Screen]) -> Int, resolve: Resolver
     ) -> Bool {
         let surface = focused.surface
-        let geometry = AXGeometry(screens: NSScreen.screens)
+        let systemScreens = NSScreen.screens
+        let geometry = AXGeometry(screens: systemScreens)
         // Tiling a natively fullscreen window fights the window server; leave it alone.
         guard !surface.isFullScreen, let current = surface.frame(in: geometry) else { return false }
 
-        let screens = AXScreens.converted(NSScreen.screens, geometry: geometry)
+        let screens = AXScreens.converted(systemScreens, geometry: geometry)
         guard let host = WindowPlacementEngine.screen(containing: current, in: screens) else {
             return false
         }
@@ -267,7 +278,64 @@ final class WindowMover {
         memory.commit(
             key: focused.key, command: command, decision: decision, appliedFrame: applied,
             screenID: landedOn, now: now)
+        if let command, command == .nextDisplay || command == .previousDisplay,
+            host.id != placement.screenID, let destination, canResize,
+            case .external = surface,
+            applied.width < placement.frame.width - AXWindowAccess.clampTolerance
+                || applied.height < placement.frame.height - AXWindowAccess.clampTolerance
+        {
+            scheduleDisplayResize(
+                focused, command: command, decision: decision, placement: placement,
+                applied: applied, destination: destination, canvas: canvas)
+        }
         return !applied.equalTo(current)
+    }
+
+    private func cancelDisplayResize() {
+        displayResize?.cancel()
+        displayResize = nil
+        displayResizeID = nil
+    }
+
+    private func scheduleDisplayResize(
+        _ focused: FocusedWindow, command: WindowCommand.ID,
+        decision: WindowActionMemory<WindowKey>.Decision,
+        placement: WindowPlacementEngine.Placement, applied: CGRect,
+        destination: WindowPlacementEngine.Screen, canvas: CGRect?
+    ) {
+        let id = UUID()
+        displayResizeID = id
+        displayResize = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+            guard !Task.isCancelled, let self, self.displayResizeID == id else { return }
+            defer {
+                self.displayResize = nil
+                self.displayResizeID = nil
+            }
+
+            let systemScreens = NSScreen.screens
+            let geometry = AXGeometry(screens: systemScreens)
+            let screens = AXScreens.converted(systemScreens, geometry: geometry)
+            let surface = focused.surface
+            guard screens.contains(destination), !surface.isFullScreen,
+                surface.canMove, surface.canResize,
+                let current = surface.frame(in: geometry), current.equalTo(applied),
+                WindowPlacementEngine.screen(containing: current, in: screens)?.id == destination.id
+            else { return }
+
+            let restoreEnhancedUI = surface.suppressEnhancedUserInterface()
+            defer { restoreEnhancedUI() }
+            guard let actual = surface.write(
+                placement, current: current, canResize: true, canvas: canvas, geometry: geometry)
+            else { return }
+            let landedOn =
+                WindowPlacementEngine.screen(containing: actual, in: screens)?.id
+                ?? placement.screenID
+            self.memory.commit(
+                key: focused.key, command: command, decision: decision, appliedFrame: actual,
+                screenID: landedOn, now: Date())
+            Self.logger.debug("Deferred display frame: \(NSStringFromRect(actual), privacy: .public)")
+        }
     }
 
     // MARK: - Fullscreen

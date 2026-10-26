@@ -450,6 +450,14 @@ run window-command-test    Tinycast/Features/WindowManagement/Model/WindowComman
                            Tinycast/Features/WindowManagement/Model/WindowPlacementEngine.swift \
                            Tinycast/Features/WindowManagement/Model/WindowActionMemory.swift \
                            Tinycast/Platform/LocalizedResource.swift
+run window-mover-test      Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
+                           Tinycast/Features/WindowManagement/Model/WindowCycle.swift \
+                           Tinycast/Features/WindowManagement/Model/WindowPlacementEngine.swift \
+                           Tinycast/Features/WindowManagement/Model/WindowActionMemory.swift \
+                           Tinycast/Features/WindowManagement/Service/WindowMover.swift \
+                           Tinycast/Features/WindowManagement/Service/WindowTarget.swift \
+                           Tinycast/Platform/NotificationToken.swift \
+                           Tinycast/Platform/LocalizedResource.swift
 run window-preset-test     Tinycast/Features/WindowManagement/Model/WindowCommand.swift \
                            Tinycast/Features/WindowManagement/Model/WindowShortcutPreset.swift \
                            Tinycast/Features/HotKeys/Model/DoubleTapModifier.swift \
