@@ -1,54 +1,59 @@
-import { Check } from "lucide-react";
-import { values } from "../data/ethos";
-import { stats } from "../data/site";
-import { Reveal } from "./ui/reveal";
-import { Section } from "./ui/section";
+import { Cpu, Heart, Lock, ShieldCheck } from "lucide-react";
+import type { ComponentType } from "react";
+import { ethos, ethosPillars, type EthosPillar } from "../data/ethos";
+import { reveal } from "../lib/reveal";
+import { RevealWords } from "./ui/reveal-words";
 
+const pillarIcons: Record<
+  EthosPillar["icon"],
+  ComponentType<{ size?: number; className?: string }>
+> = {
+  native: Cpu,
+  local: Lock,
+  source: ShieldCheck,
+  free: Heart,
+};
+
+// The page's closing statement, as a band that reaches the window edges. It is
+// the only place the serif appears, which is what makes it read as a statement
+// rather than one more section.
 export function Ethos() {
   return (
-    <Section
-      id="why"
-      eyebrow="Why it's tiny"
-      title="Built like a Mac app should be."
-      intro="Native SwiftUI and AppKit. No Electron, no bloat — fast because there's barely anything to it."
-    >
-      {/* Stat strip — the one place numbers get loud. */}
-      <Reveal className="mb-10 md:mb-14">
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/5 shadow-key md:grid-cols-4">
-          {stats.map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-ink px-4 py-6 text-center sm:px-6 sm:py-8"
-            >
-              <div className="text-stat font-medium text-white">
-                {stat.value}
-                {stat.unit && (
-                  <span className="ml-1 text-body-lg text-ash">
-                    {stat.unit}
-                  </span>
-                )}
-              </div>
-              <div className="mt-3 font-mono text-eyebrow uppercase text-smoke">
-                {stat.label}
-              </div>
-            </div>
-          ))}
-        </div>
-      </Reveal>
+    <section id="ethos" className="border-y border-border bg-tint/2">
+      <div className="mx-auto max-w-7xl px-4 py-20 sm:px-10">
+        <blockquote className="mx-auto max-w-3xl text-center">
+          <p
+            className="text-quote text-balance font-serif text-fg"
+            {...reveal("words")}
+          >
+            <RevealWords text={`“${ethos.quote}`} />{" "}
+            <em className="italic text-violet">
+              <RevealWords
+                text={`${ethos.emphasis}”`}
+                start={ethos.quote.split(" ").length}
+              />
+            </em>
+          </p>
+          <footer className="mt-4 text-small text-fg-subtle" {...reveal("text", 4)}>
+            {ethos.attribution}
+          </footer>
+        </blockquote>
 
-      <Reveal>
-        <ul className="flex flex-wrap justify-center gap-2">
-          {values.map((value) => (
-            <li
-              key={value}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-2 text-small text-ash shadow-keycap"
-            >
-              <Check size={13} strokeWidth={2.4} className="text-violet-bright" />
-              {value}
-            </li>
-          ))}
-        </ul>
-      </Reveal>
-    </Section>
+        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {ethosPillars.map((pillar, index) => {
+            const Icon = pillarIcons[pillar.icon];
+            return (
+              <div key={pillar.title} {...reveal("text", index)}>
+                <Icon size={18} className="text-fg-subtle" />
+                <h3 className="mt-3 text-body font-semibold text-fg">
+                  {pillar.title}
+                </h3>
+                <p className="mt-1.5 text-small text-fg-muted">{pillar.body}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }

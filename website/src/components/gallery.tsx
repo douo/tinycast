@@ -1,22 +1,19 @@
+"use client";
+
 import { Play } from "lucide-react";
+import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useEffect, useState } from "react";
-import Lightbox, { type Slide } from "yet-another-react-lightbox";
-import Captions from "yet-another-react-lightbox/plugins/captions";
-import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
-import Video from "yet-another-react-lightbox/plugins/video";
-import "yet-another-react-lightbox/styles.css";
-import "yet-another-react-lightbox/plugins/captions.css";
-import "yet-another-react-lightbox/plugins/thumbnails.css";
+import type { Slide } from "yet-another-react-lightbox";
 import { galleryItems, type GalleryItem } from "../data/gallery";
-import { Reveal } from "./ui/reveal";
 import { Section } from "./ui/section";
 
-// Everything in `public/` is served under the Vite base path.
-const asset = (name: string) => `${import.meta.env.BASE_URL}${name}`;
+// The lightbox is ~30 KB gzipped and does nothing until a tile is clicked.
+const GalleryLightbox = dynamic(() => import("./gallery-lightbox"));
 
 // The grid thumbnail: an explicit thumb, else a video's poster, else the image.
 const tileImage = (item: GalleryItem) =>
-  asset(item.thumb ?? (item.type === "video" ? (item.poster ?? item.src) : item.src));
+  item.thumb ?? (item.type === "video" ? (item.poster ?? item.src) : item.src);
 
 // One gallery item → one lightbox slide. Images carry title/description for the
 // Captions plugin; videos use the Video plugin's `sources` shape.
@@ -24,16 +21,16 @@ function toSlide(item: GalleryItem): Slide {
   if (item.type === "video") {
     return {
       type: "video",
-      poster: item.poster ? asset(item.poster) : undefined,
+      poster: item.poster,
       width: item.width,
       height: item.height,
       title: item.title,
       description: item.caption,
-      sources: [{ src: asset(item.src), type: "video/mp4" }],
+      sources: [{ src: item.src, type: "video/mp4" }],
     };
   }
   return {
-    src: asset(item.src),
+    src: item.src,
     title: item.title,
     description: item.caption,
     width: item.width,
@@ -43,9 +40,15 @@ function toSlide(item: GalleryItem): Slide {
 
 export function Gallery() {
   const [index, setIndex] = useState(-1);
-  const slides = galleryItems.map(toSlide);
+  // Once opened, keep it mounted so closing and reopening costs no fetch.
+  const [everOpened, setEverOpened] = useState(false);
 
-  // Lock scroll ourselves instead of via YARL's NoScroll module: YARL pads the
+  function open(i: number) {
+    setEverOpened(true);
+    setIndex(i);
+  }
+
+  // Lock scroll ourselves instead of via the lightbox's own module: it pads the
   // scrollbar width onto <body> and every fixed element (the scroll-top button
   // included, shifting its arrow). `scrollbar-gutter: stable` already reserves
   // that space, so a plain overflow:hidden lock changes no widths — no shift.
@@ -62,66 +65,64 @@ export function Gallery() {
   return (
     <Section
       id="gallery"
-      eyebrow="Tinycast in action"
-      title="See it in motion."
-      intro="A palette that stays out of your way — until you need it."
+      index={2}
+      label="In action"
+      title="Straight from the app."
+      intro="The palette at the top of this page is a recreation. These screenshots and videos come from Tinycast itself. Click to enlarge an image or play a video."
     >
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {galleryItems.map((item, i) => (
-          <Reveal key={`${item.title}-${i}`} delay={i * 60}>
-            <button
-              type="button"
-              onClick={() => setIndex(i)}
-              className="group flex h-full w-full flex-col gap-3 rounded-2xl bg-ink/40 p-3 text-left shadow-key transition-shadow duration-200 hover:shadow-key-hover"
-            >
-              <figure className="relative aspect-video w-full overflow-hidden rounded-xl">
-                <img
-                  src={tileImage(item)}
-                  alt={item.title}
-                  className="block size-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                  loading="lazy"
-                  decoding="async"
-                />
-                {item.type === "video" && (
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="flex size-12 items-center justify-center rounded-full bg-black/40 text-white shadow-highlight backdrop-blur-sm">
-                      <Play size={20} fill="currentColor" />
+      <div className="overflow-hidden rounded-xl border border-border/70 bg-surface shadow-xs">
+        <div className="flex min-h-11 items-center gap-3 border-b border-border/60 px-4 py-1.5 font-mono text-micro uppercase text-fg-muted">
+          <span
+            aria-hidden="true"
+            className="size-1.5 rounded-full bg-violet"
+          />
+          Captured in Tinycast
+          <span className="ml-auto hidden sm:inline">Click to view or play</span>
+        </div>
+        <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4">
+          {galleryItems.map((item, i) => {
+            return (
+              <button
+                key={`${item.title}-${i}`}
+                type="button"
+                onClick={() => open(i)}
+                className="group flex flex-col gap-2 text-left"
+              >
+                <figure className="relative aspect-video w-full overflow-hidden rounded-lg ring-1 ring-border/60 transition-shadow duration-200 group-hover:ring-border-strong">
+                  <Image
+                    src={tileImage(item)}
+                    alt={item.title}
+                    fill
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 45vw, 90vw"
+                    className="object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                  />
+                  {item.type === "video" && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="flex size-16 items-center justify-center rounded-full bg-fg text-canvas transition-transform duration-200 group-hover:scale-105">
+                        <Play size={24} fill="currentColor" />
+                      </span>
                     </span>
-                  </span>
-                )}
-              </figure>
-              <div className="px-1 pb-1">
-                <h3 className="text-body-lg font-medium text-white">
-                  {item.title}
-                </h3>
-                <p className="mt-1 text-body text-ash">{item.caption}</p>
-              </div>
-            </button>
-          </Reveal>
-        ))}
+                  )}
+                </figure>
+                <div>
+                  <h3 className="text-small font-medium text-fg">
+                    {item.title}
+                  </h3>
+                  <p className="text-small text-fg-muted">{item.caption}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <Lightbox
-        open={index >= 0}
-        index={index}
-        close={() => setIndex(-1)}
-        slides={slides}
-        plugins={[Video, Captions, Thumbnails]}
-        controller={{ closeOnBackdropClick: true }}
-        noScroll={{ disabled: true }}
-        // Muted autoplay is the only cross-browser-reliable autoplay; the
-        // (now unobstructed) controls let viewers unmute.
-        video={{ autoPlay: true, muted: true, controls: true, playsInline: true }}
-        thumbnails={{
-          position: "bottom",
-          width: 140,
-          height: 90,
-          border: 1,
-          borderRadius: 10,
-          gap: 12,
-          padding: 4,
-        }}
-      />
+      {everOpened && (
+        <GalleryLightbox
+          index={index}
+          slides={galleryItems.map(toSlide)}
+          close={() => setIndex(-1)}
+        />
+      )}
     </Section>
   );
 }

@@ -1,5 +1,3 @@
-<!-- Read CONTRIBUTING.md first. An agreed issue is mandatory; PRs without one get closed. -->
-
 ## Related issue
 
 Closes #
@@ -32,5 +30,5 @@ Leak-tested:
 
 ## Tests & validation
 
-<!-- Which Tools/ harnesses you ran and any cases you added, plus what you exercised by hand.
+<!-- Which Tests/ harnesses you ran and any cases you added, plus what you exercised by hand.
      Commands: docs/development.md § Tests. -->

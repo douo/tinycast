@@ -1,49 +1,55 @@
 import { site } from "../data/site";
-import { DiscordLogo, GitHubLogo, Logo } from "./ui/icon";
-import { MetaStrip } from "./ui/meta-strip";
+import { latestVersion } from "../lib/version";
+import { Logo } from "./ui/icon";
+import { Link } from "./ui/link";
 
-export function Footer() {
-  const repoPath = site.repo.replace("https://", "");
-  const hasDiscord = site.community.discord.startsWith("http");
+const links = [
+  { label: "Docs", href: "/docs" },
+  { label: "Privacy", href: "/#privacy" },
+  { label: "Install", href: "/docs/install" },
+  { label: "Changelog", href: "/changelog" },
+  { label: "GitHub", href: site.repo },
+  { label: "Discord", href: site.community.discord },
+  { label: "Support", href: site.support },
+];
+
+// One rule and one row. Everything a three-column sitemap held is a scroll or a
+// nav click away on a page this short, and the height it cost was the price.
+export async function Footer() {
+  const version = await latestVersion();
 
   return (
-    <footer className="border-t border-border/50">
-      <div className="container-page flex flex-col items-center gap-6 py-14 text-center">
-        <a
-          href="#top"
-          className="flex items-center gap-1 text-body font-medium text-white"
-        >
-          <Logo size={24} />
-          {site.name}
-        </a>
-
-        <div className="flex flex-col items-center gap-2">
-          <MetaStrip />
-          <p className="font-mono text-caption text-smoke">
-            Made for people who like their Mac fast
+    <footer className="border-t border-border">
+      <div className="mx-auto flex max-w-7xl flex-col-reverse gap-4 px-4 py-8 sm:px-10 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2.5">
+          <Logo size={20} />
+          <p className="text-caption text-fg-subtle">
+            © {new Date().getFullYear()} {site.name} · {version} ·{" "}
+            <a
+              href={site.licenseUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="transition-colors hover:text-fg"
+            >
+              {site.license}
+            </a>
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3">
-          <a
-            href={site.repo}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-2 text-small text-ash transition-colors hover:text-white"
-          >
-            <GitHubLogo size={16} />
-            {repoPath}
-          </a>
-          <a
-            href={site.community.discord}
-            target={hasDiscord ? "_blank" : undefined}
-            rel={hasDiscord ? "noreferrer" : undefined}
-            className="flex items-center gap-2 text-small text-ash transition-colors hover:text-white"
-          >
-            <DiscordLogo size={16} />
-            Join the Discord
-          </a>
-        </div>
+        <nav
+          aria-label="Footer"
+          className="flex flex-wrap items-center gap-x-5 gap-y-2"
+        >
+          {links.map((link) => (
+            <Link
+              key={link.label}
+              href={link.href}
+              className="text-small text-fg-muted transition-colors hover:text-fg"
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
       </div>
     </footer>
   );

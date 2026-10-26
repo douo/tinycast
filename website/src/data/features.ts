@@ -1,55 +1,150 @@
 import type { IconName } from "../components/ui/feature-icons";
 
+export type FeaturePreview =
+  | "launcher"
+  | "extensions"
+  | "clipboard"
+  | "calculator"
+  | "aiChat"
+  | "quickActions"
+  | "windows"
+  | "snippets";
+
 export type Feature = {
   icon: IconName;
   title: string;
   body: string;
-  // `wide` features span two columns in the bento grid.
-  wide?: boolean;
+  /** Deep link into the docs page that covers this feature. */
+  href: string;
+  preview: FeaturePreview;
+  /** Spans two columns of the bento on wide screens. */
+  isWide: boolean;
 };
 
+export type MinorFeature = Pick<Feature, "icon" | "title" | "href">;
+
 // Everything Tinycast does, in plain language. Kept true to what the app
-// actually ships — each maps to a real feature in the source.
-export const features: Feature[] = [
+// actually ships — each maps to a real feature in the source, and each links
+// to the docs page that covers it. Order sets the bento: every row adds up to
+// four columns, with wide cards counting as two.
+export const coreFeatures: Feature[] = [
   {
     icon: "launch",
     title: "App launcher",
-    body: "Fuzzy-search every app on your Mac and open it with a keystroke. Pin the ones you reach for, and see what's already running at a glance.",
-    wide: true,
-  },
-  {
-    icon: "clipboard",
-    title: "Clipboard history",
-    body: "Text and images, full-text searchable, pasted straight back where you came from — kept as long as you like, up to forever.",
+    body: "Find any app by typing a few letters and open it from the keyboard. Pin favorites, see what's running, and quit or restart apps.",
+    href: "/docs/launcher",
+    preview: "launcher",
+    isWide: true,
   },
   {
     icon: "calculator",
     title: "Inline calculator",
-    body: "Type math, unit or live currency conversions right in the palette, read the answer as you go, and revisit past results from history.",
+    body: "Math, units, currencies, time zones, and dates like “days till 9 Apr”.",
+    href: "/docs/features/calculator",
+    preview: "calculator",
+    isWide: false,
   },
   {
-    icon: "emoji",
-    title: "Emoji & symbols",
-    body: "Search the full emoji and symbol set, tune the skin tone, and your most-used ones float to the top.",
+    icon: "clipboard",
+    title: "Clipboard history",
+    body: "Search the text, images, files and colors you've copied, then paste them back.",
+    href: "/docs/features/clipboard",
+    preview: "clipboard",
+    isWide: false,
   },
   {
-    icon: "globe",
-    title: "Global hotkey",
-    body: "One shortcut summons the palette from anywhere — over any app, full-screen or not.",
+    icon: "aiChat",
+    title: "AI Chat",
+    body: "Use Apple Intelligence, Claude, Codex, Grok, OpenCode or your own API key.",
+    href: "/docs/ai",
+    preview: "aiChat",
+    isWide: false,
+  },
+  {
+    icon: "quickActions",
+    title: "Quick Actions",
+    body: "Select text in any app and fix, rewrite, translate or summarize it.",
+    href: "/docs/ai/quick-actions",
+    preview: "quickActions",
+    isWide: false,
+  },
+  {
+    icon: "windows",
+    title: "Window management",
+    body: "35 keyboard commands for halves, thirds, nudges and moving between displays, plus layouts you save.",
+    href: "/docs/features/window-management",
+    preview: "windows",
+    isWide: true,
+  },
+  {
+    icon: "extensions",
+    title: "Raycast extensions",
+    body: "Install them from the Raycast Store without Node or a build step. They run in JavaScriptCore and render in SwiftUI.",
+    href: "/docs/extensions",
+    preview: "extensions",
+    isWide: true,
+  },
+  {
+    icon: "snippets",
+    title: "Snippets",
+    body: "Type a keyword in any app and it expands into text. Snippets can use Markdown and placeholders.",
+    href: "/docs/features/snippets",
+    preview: "snippets",
+    isWide: true,
+  },
+];
+
+// The long tail: named, linked, and kept out of the way of the eight above.
+export const moreFeatures: MinorFeature[] = [
+  { icon: "notes", title: "Floating notes", href: "/docs/features/notes" },
+  {
+    icon: "fileSearch",
+    title: "File search",
+    href: "/docs/features/file-search",
+  },
+  {
+    icon: "calendar",
+    title: "Calendar & meetings",
+    href: "/docs/features/calendar",
+  },
+  {
+    icon: "navigation",
+    title: "Window & menu search",
+    href: "/docs/features/navigation",
+  },
+  {
+    icon: "quicklinks",
+    title: "Quicklinks",
+    href: "/docs/launcher/quicklinks",
+  },
+  {
+    icon: "keyboard",
+    title: "Custom commands",
+    href: "/docs/launcher/commands",
   },
   {
     icon: "bolt",
-    title: "Per-app hotkeys",
-    body: "Bind a key to an app to toggle it: press once to focus, again to hide.",
+    title: "31 system actions",
+    href: "/docs/launcher/system-actions",
+  },
+  { icon: "emoji", title: "Emoji & symbols", href: "/docs/features/emoji" },
+  { icon: "globe", title: "Per-app hotkeys", href: "/docs/reference/hotkeys" },
+  { icon: "hyper", title: "Hyper key", href: "/docs/reference/hotkeys" },
+  { icon: "alias", title: "Aliases", href: "/docs/launcher/aliases" },
+  {
+    icon: "uninstall",
+    title: "App uninstaller",
+    href: "/docs/launcher/uninstall",
   },
   {
-    icon: "hyper",
-    title: "Hyper key",
-    body: "Turn Caps Lock into a ⌃⌥⇧⌘ super-modifier — a whole extra layer of shortcuts, shown as a single ✦.",
+    icon: "inputSource",
+    title: "Input source switching",
+    href: "/docs/palette#input-source",
   },
   {
-    icon: "backup",
-    title: "Backup & restore",
-    body: "Export every shortcut, favorite, and clip to one file, then restore it on any Mac.",
+    icon: "appearance",
+    title: "Light, Dark and glass",
+    href: "/docs/palette#appearance",
   },
+  { icon: "backup", title: "Backup & restore", href: "/docs/reference/backup" },
 ];

@@ -1,8 +1,10 @@
 // Drives the "Tinycast in action" gallery + lightbox. Each item is a tile in
-// the grid and a slide in the lightbox. `src`/`thumb`/`poster` are resolved
-// against import.meta.env.BASE_URL in the component, so give plain filenames
-// that live in `public/`. `width`/`height` are the media's real pixel size
-// (used for lightbox aspect); the grid tile is always 16:9.
+// the grid and a slide in the lightbox. `src`/`thumb`/`poster` are URLs as
+// rendered — root-absolute for `public/`, absolute for anything on R2.
+// `width`/`height` are the media's real pixel size (used for lightbox aspect);
+// the grid tile is always 16:9.
+
+import { site } from "./site";
 
 export type GalleryItem = {
   type: "image" | "video";
@@ -21,67 +23,77 @@ export type GalleryItem = {
 export const galleryItems: GalleryItem[] = [
   {
     type: "video",
-    src: "tinycast-in-action.mp4",
-    poster: "screenshot.png",
-    title: "Tinycast in action",
-    caption: "A quick tour — launcher, clipboard, calculator, and more.",
-    width: 3024,
-    height: 1964,
-  },
-  {
-    type: "image",
-    src: "calculator.png",
+    src: `${site.cdn}/calculator.mp4`,
+    poster: "/calculator.jpg",
     title: "Inline calculator",
-    caption: "Math, unit and currency conversions, right in the palette.",
-    width: 2148,
-    height: 1302,
+    caption: "Answers math and converts units and currencies as you type.",
+    width: 1728,
+    height: 1118,
   },
   {
     type: "image",
-    src: "clipboard.png",
+    src: "/clipboard-history.jpg",
     title: "Clipboard history",
-    caption: "Search every text and image you've copied. Always local.",
-    width: 2092,
-    height: 1268,
+    caption:
+      "Search the text and images you've copied. History is stored only on your Mac.",
+    width: 3359,
+    height: 2171,
   },
   {
-    type: "image",
-    src: "unlimited-clipboard-history.png",
-    title: "Unlimited by default",
-    caption: "No Pro tier — keep your full history as long as you like.",
-    width: 2226,
-    height: 1604,
+    type: "video",
+    src: `${site.cdn}/dictation.mp4`,
+    poster: "/dictation.jpg",
+    title: "Dictation",
+    caption:
+      "Turn your voice into text in any app. Fast, private and fully on-device.",
+    width: 1728,
+    height: 1118,
   },
   {
-    type: "image",
-    src: "emoji.png",
+    type: "video",
+    src: `${site.cdn}/emoji-and-symbols.mp4`,
+    poster: "/emoji-and-symbols.jpg",
     title: "Emoji & symbols",
-    caption: "Search the whole set; your most-used float to the top.",
-    width: 2106,
-    height: 1244,
+    caption: "Search every emoji. The ones you use most show up first.",
+    width: 1728,
+    height: 1118,
+  },
+  {
+    type: "video",
+    src: `${site.cdn}/notes.mp4`,
+    poster: "/notes.jpg",
+    title: "Notes",
+    caption:
+      "Capture ideas in Markdown. Keep your notes close, without breaking your flow.",
+    width: 1728,
+    height: 1118,
+  },
+  {
+    type: "video",
+    src: `${site.cdn}/quick-ai.mp4`,
+    poster: "/quick-ai.jpg",
+    title: "Quick AI",
+    caption:
+      "Ask your favorite AI. Get quick answers or open a full chat with history.",
+    width: 1728,
+    height: 1118,
+  },
+  {
+    type: "video",
+    src: `${site.cdn}/quick-actions.mp4`,
+    poster: "/quick-actions.jpg",
+    title: "Quick Actions",
+    caption:
+      "Rewrite, translate, summarize and more with AI. Create your own custom actions.",
+    width: 1728,
+    height: 1118,
   },
   {
     type: "image",
-    src: "per-app-hotkey.png",
-    title: "Per-app hotkeys",
-    caption: "Bind a key to an app: press to focus, again to hide.",
-    width: 2212,
-    height: 1606,
-  },
-  {
-    type: "image",
-    src: "ram-usage.png",
-    title: "Featherweight",
-    caption: "Under 100 MB of memory, a few megabytes on disk.",
-    width: 2558,
-    height: 1754,
-  },
-  {
-    type: "image",
-    src: "backup-import-settings.png",
-    title: "Backup & import",
-    caption: "Export your whole setup, or bring it over from Raycast.",
-    width: 2098,
-    height: 1600,
+    src: "/activity-monitor.jpg",
+    title: "Light on memory",
+    caption: "Stays under 100 MB of memory, no matter how long it runs.",
+    width: 3359,
+    height: 2171,
   },
 ];
