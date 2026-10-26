@@ -119,10 +119,11 @@ edge rather than shoving the window off the far side. Maximize Height and Maximi
 untouched axis's position but clamp it, so a window sitting off the display doesn't come back
 full-height and still off-screen.
 
-**Next/Previous Display** keep a maximized window maximized, using the destination's visible frame
-and the configured gap in points. A frame within 2 pt on each edge of either the source's Maximize
-canvas or its full visible frame counts as maximized, so this also works without an action-memory
-record. Other windows retain proportional placement; remembered tiles are re-derived as before.
+**Next/Previous Display** scale the window's position and size between the source and destination
+canvases, each inset by its own sanitized gap. Filling the source canvas therefore fills the
+destination canvas, and a half-sized window keeps that proportion. There is no Maximize flag or
+frame-matching threshold. A window filling the full visible frame is capped into the destination
+canvas; remembered tiles are re-derived as before.
 
 ## Custom sizes
 
@@ -252,8 +253,7 @@ inherited.
 The write sequence is **size → position → size**. Whichever single order you pick is wrong in one
 direction: growing first fails when the source display is smaller than the target size, shrinking first
 leaves the window shrunken after a cross-display move. Writing the size on both sides of the position
-write costs one extra round trip and makes both directions correct with no branching; one of the two is
-always a no-op.
+write handles source-display size limits in both directions.
 
 **Failing quietly** is a requirement, not a nicety, and has three distinct paths:
 
@@ -264,7 +264,9 @@ always a no-op.
 
 The frame is read back **once** afterwards, for three reasons: to detect an app-imposed minimum size
 (AX exposes no attribute for it, so the read-back is the only way to learn it), to record a truthful
-`appliedFrame`, and to report whether anything actually changed. When the app refused to shrink, the
+`appliedFrame`, and to report whether anything actually changed. If resizing shifted the origin, one
+position → size correction applies the size again at the corrected destination: a position write can
+itself constrain the size during a display transfer. When the app refused to shrink, the
 window is re-placed per the placement's `anchor` so a left half stays left-aligned instead of drifting
 centre. **One correction, no loop** — iterating against an app that fights back just makes the window
 visibly jitter.
@@ -388,10 +390,10 @@ and every shortcut stays editable afterwards.
 
 ## Testing
 
-`Tests/window-command-test.swift` (578 assertions) covers the catalog, the AX-space convention lock,
+`Tests/window-command-test.swift` covers the catalog, the AX-space convention lock,
 tiling on divisible and non-divisible screens, off-origin and negative-coordinate displays, gap
 arithmetic including degenerate values, sizing, the Make Larger/Smaller round trip, nudges, display
-moves and wrapping, maximized display moves with gaps and app-imposed frame differences, both cycling
+moves and wrapping, proportional display occupancy with gaps and app-imposed frame differences, both cycling
 modes including the strip walk, its wrap and a run of real presses
 across displays, restore recovery, every `WindowActionMemory` rule, and a fuzz sweep over every
 command × gap × screen × cycle × step × degenerate window frame checking for non-finite output,
