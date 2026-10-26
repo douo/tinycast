@@ -119,6 +119,11 @@ edge rather than shoving the window off the far side. Maximize Height and Maximi
 untouched axis's position but clamp it, so a window sitting off the display doesn't come back
 full-height and still off-screen.
 
+**Next/Previous Display** keep a maximized window maximized, using the destination's visible frame
+and the configured gap in points. A frame within 2 pt on each edge of either the source's Maximize
+canvas or its full visible frame counts as maximized, so this also works without an action-memory
+record. Other windows retain proportional placement; remembered tiles are re-derived as before.
+
 ## Custom sizes
 
 A **custom size** is a user-defined command: a name, a width and a height — each in points or as a
@@ -383,10 +388,11 @@ and every shortcut stays editable afterwards.
 
 ## Testing
 
-`Tests/window-command-test.swift` (507 assertions) covers the catalog, the AX-space convention lock,
+`Tests/window-command-test.swift` (578 assertions) covers the catalog, the AX-space convention lock,
 tiling on divisible and non-divisible screens, off-origin and negative-coordinate displays, gap
 arithmetic including degenerate values, sizing, the Make Larger/Smaller round trip, nudges, display
-moves and wrapping, both cycling modes including the strip walk, its wrap and a run of real presses
+moves and wrapping, maximized display moves with gaps and app-imposed frame differences, both cycling
+modes including the strip walk, its wrap and a run of real presses
 across displays, restore recovery, every `WindowActionMemory` rule, and a fuzz sweep over every
 command × gap × screen × cycle × step × degenerate window frame checking for non-finite output,
 negative dimensions, off-screen results, non-determinism and, at step 0, drift on repeat.
