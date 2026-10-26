@@ -1,11 +1,13 @@
 // Portions adapted from Rooms (MIT): https://github.com/saragordic/rooms/blob/main/LICENSE
 import AppKit
+import OSLog
 // `@preconcurrency` downgrades AX diagnostics: `kAX…` are mutable C globals, but constant.
 @preconcurrency import ApplicationServices
 
 /// Every `AXUIElement` call in the feature, so no two callers disagree on what a window is.
 @MainActor
 enum AXWindowAccess {
+    private static let logger = Logger(subsystem: "com.tinycast", category: "WindowManagement")
     /// A hung target must not stall main for the AX default. Per element, never inherited.
     static let messagingTimeout: Float = 1
     /// Slack when checking whether the app honoured the size we asked for.
@@ -141,13 +143,17 @@ enum AXWindowAccess {
 
         guard var actual = frame(of: window) else { return target }
 
-        // The second resize can shift the origin: some apps anchor on a different corner.
         if abs(actual.minX - target.minX) > clampTolerance
             || abs(actual.minY - target.minY) > clampTolerance
+            || actual.width < target.width - clampTolerance
+            || actual.height < target.height - clampTolerance
         {
+            logger.debug("AX frame before correction: \(NSStringFromRect(actual), privacy: .public)")
+            logger.debug("AX frame target: \(NSStringFromRect(target), privacy: .public)")
             _ = setPosition(target.origin, on: window)
             _ = setSize(target.size, on: window)
             actual = frame(of: window) ?? actual
+            logger.debug("AX frame after correction: \(NSStringFromRect(actual), privacy: .public)")
         }
 
         // An app-imposed minimum: re-place once per the anchor. No loop, which would jitter.

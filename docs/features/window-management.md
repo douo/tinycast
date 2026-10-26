@@ -264,8 +264,9 @@ write handles source-display size limits in both directions.
 
 The frame is read back **once** afterwards, for three reasons: to detect an app-imposed minimum size
 (AX exposes no attribute for it, so the read-back is the only way to learn it), to record a truthful
-`appliedFrame`, and to report whether anything actually changed. If resizing shifted the origin, one
-position → size correction applies the size again at the corrected destination: a position write can
+`appliedFrame`, and to report whether anything actually changed. If resizing shifted the origin or
+left the window smaller than requested, one position → size correction applies the size again at
+the corrected destination: a position write can
 itself constrain the size during a display transfer. When the app refused to shrink, the
 window is re-placed per the placement's `anchor` so a left half stays left-aligned instead of drifting
 centre. **One correction, no loop** — iterating against an app that fights back just makes the window
