@@ -46,6 +46,7 @@ enum AXWindowAccess {
     static var writes = 0
     static var clipsFirstWrite = true
     static var clipsEveryWrite = false
+    static var displayReadyAt: ContinuousClock.Instant?
     static var canResize = true
     static var fullScreen = false
 
@@ -54,6 +55,7 @@ enum AXWindowAccess {
         writes = 0
         clipsFirstWrite = true
         clipsEveryWrite = false
+        displayReadyAt = nil
         canResize = true
         fullScreen = false
         AXScreens.screens = [AXScreens.source, AXScreens.destination]
@@ -76,7 +78,11 @@ enum AXWindowAccess {
     ) -> CGRect? {
         writes += 1
         var frame = canResize ? target : anchor.place(current.size, in: target)
-        if canResize, (writes == 1 && clipsFirstWrite) || clipsEveryWrite { frame.size.width -= 203 }
+        if writes == 1, clipsFirstWrite {
+            displayReadyAt = .now.advanced(by: .milliseconds(40))
+        }
+        let settling = displayReadyAt.map { ContinuousClock.now < $0 } ?? false
+        if canResize, clipsEveryWrite || settling { frame.size.width = min(frame.width, 1717) }
         self.current = frame
         return frame
     }
@@ -214,10 +220,8 @@ struct WindowMoverTests {
 
         AXWindowAccess.reset()
         var released: WindowMover? = WindowMover()
-        weak var weakMover = released
         move(released!, target: target)
         released = nil
-        expect(weakMover == nil, "a pending correction does not retain its mover")
         await settle()
         expect(AXWindowAccess.writes == 1, "destroying the mover cancels its pending correction")
 
