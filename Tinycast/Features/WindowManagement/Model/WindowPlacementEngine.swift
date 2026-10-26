@@ -110,7 +110,7 @@ enum WindowPlacementEngine {
 
         switch input.command {
         case .nextDisplay, .previousDisplay:
-            return displayPlacement(input, from: host, gap: gap)
+            return displayPlacement(input, from: host)
         default:
             break
         }
@@ -218,7 +218,7 @@ enum WindowPlacementEngine {
     }
 
     private static func displayPlacement(
-        _ input: Input, from host: Screen, gap: CGFloat
+        _ input: Input, from host: Screen
     )
         -> Placement?
     {
@@ -229,7 +229,7 @@ enum WindowPlacementEngine {
         let offset = input.command == .nextDisplay ? 1 : -1
         let destination = ordered[(index + offset + ordered.count) % ordered.count]
         let frame = moved(
-            input.windowFrame, from: host, to: destination, gap: gap,
+            input.windowFrame, from: host, to: destination, gap: input.gap,
             lastTile: input.lastTileCommand)
         return Placement(
             frame: frame, screenID: destination.id, anchor: .centered, resizes: true)
@@ -244,10 +244,9 @@ enum WindowPlacementEngine {
                 to.visibleFrame, x0: fractions.x0, x1: fractions.x1, y0: fractions.y0,
                 y1: fractions.y1, gap: sanitizedGap(gap, in: to.visibleFrame))
         }
-        let source = from.visibleFrame
-        let target = to.visibleFrame
+        let source = canvas(from.visibleFrame, gap: sanitizedGap(gap, in: from.visibleFrame))
+        let target = canvas(to.visibleFrame, gap: sanitizedGap(gap, in: to.visibleFrame))
         guard source.width > 0, source.height > 0 else { return frame }
-        // Relative to `visibleFrame`, so a window tucked against the Dock lands tucked again.
         let relativeX = (frame.minX - source.minX) / source.width
         let relativeY = (frame.minY - source.minY) / source.height
         let scaled = CGRect(

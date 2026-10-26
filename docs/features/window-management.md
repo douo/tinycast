@@ -81,8 +81,9 @@ through the window's own screen height shears every rect on a differently-sized 
 difference. That bug is invisible on a single monitor and wrong on every mixed-size multi-monitor
 setup, so it is worth stating twice.
 
-`AXGeometry` is snapshotted once per command: `NSScreen.screens` can change between calls on hotplug,
-wake or a resolution change, and mixing two anchors inside one command corrupts the result.
+`AXGeometry` is snapshotted once per synchronous placement: `NSScreen.screens` can change on hotplug,
+wake or a resolution change. Deferred operations take a fresh snapshot after each suspension and
+validate display identity and bounds before writing, so they never mix coordinate anchors.
 
 Nothing here touches `backingScaleFactor`. `NSScreen.frame`, `NSScreen.visibleFrame` and AX
 coordinates are all in points, so mixed-DPI correctness is automatic; a scale factor appearing anywhere
@@ -118,6 +119,12 @@ An oversized or off-screen window is always clamped back onto the display; `clam
 edge rather than shoving the window off the far side. Maximize Height and Maximize Width keep the
 untouched axis's position but clamp it, so a window sitting off the display doesn't come back
 full-height and still off-screen.
+
+**Next/Previous Display** scale the window's position and size between the source and destination
+canvases, each inset by its own sanitized gap. Filling the source canvas therefore fills the
+destination canvas, and a half-sized window keeps that proportion. There is no Maximize flag or
+frame-matching threshold. A window filling the full visible frame is capped into the destination
+canvas; remembered tiles are re-derived as before.
 
 ## Custom sizes
 
@@ -239,16 +246,15 @@ because the palette is frontmost when a command dispatches from it — `WindowCo
 a `WindowTarget`, which is either an external app or one of our own windows (see
 [Choosing a target](#choosing-a-target)), and restores focus to it rather than dropping it. The own
 case skips AX and the Accessibility prompt entirely: placing our own window needs no grant. It is
-synchronous: every AX call is a bounded mach round trip capped by a 1s
-messaging timeout, and `await` would only add reentrancy between a held hotkey's repeats. The timeout
+synchronous initially: every AX call is a bounded mach round trip capped by a 1s
+messaging timeout. The timeout
 is set on the application element _and again_ on the window element — it is per-element and never
 inherited.
 
 The write sequence is **size → position → size**. Whichever single order you pick is wrong in one
 direction: growing first fails when the source display is smaller than the target size, shrinking first
 leaves the window shrunken after a cross-display move. Writing the size on both sides of the position
-write costs one extra round trip and makes both directions correct with no branching; one of the two is
-always a no-op.
+write handles source-display size limits in both directions.
 
 **Failing quietly** is a requirement, not a nicety, and has three distinct paths:
 
@@ -264,6 +270,16 @@ window is re-placed per the placement's `anchor` so a left half stays left-align
 centre. **One correction, no loop** — iterating against an app that fights back just makes the window
 visibly jitter.
 
+**A clipped external display move gets one deferred resize.** Agent Terminal can report the correct
+destination position but a width still constrained by the source display; repeating the AX writes
+immediately returns the same clipped width. `WindowMover` waits 50 ms before applying the original
+placement once more, only when Next/Previous Display crossed displays and its resize landed smaller
+than requested. It owns and cancels the task; another command or custom size supersedes it. Before
+writing, it checks cancellation, operation identity, the unchanged observed frame, the destination
+screen snapshot, fullscreen and move/resize capabilities. A successful correction updates action
+memory with the final observed frame while retaining the original Restore point. Own windows and
+honored external writes stay synchronous.
+
 **Toggle Fullscreen** uses the undocumented `AXFullScreen` attribute, falling back to pressing
 `AXFullScreenButton`, then a quiet no-op. There is deliberately no synthetic ⌃⌘F third attempt: it is
 app-rebindable and could fire an unrelated menu command. It does not read geometry back — the
@@ -271,8 +287,24 @@ transition is animated and asynchronous, so any frame read there is a mid-animat
 clears the cycle chain while keeping the restore point, since macOS restores the pre-fullscreen frame
 itself but the user's original frame is still the right Restore target.
 
-Windows that are minimized, not `AXWindow`-roled (sheets, popovers), already natively fullscreen, or
-that report no position or size are rejected before any work happens.
+**Next/Previous Display also transfers native fullscreen windows.** `WindowMover` requests exit,
+waits for the ordinary frame to settle, maps that frame proportionally onto the destination, then
+requests native fullscreen there. The system exit and entry animations remain visible; Tinycast
+does not move or reorder the fullscreen Space itself. Each transition is bounded by five seconds,
+with a minimum 500 ms transition wait and 150 ms of stable geometry before proceeding. The ordinary
+move gets the same one-shot 50 ms correction for a clipped external resize. Only the ordinary frames
+enter action memory, so Restore never learns an animated fullscreen frame.
+
+The mover owns and cancels the transfer task. Display commands arriving during a transfer are ignored;
+another window command or custom size cancels it. Every continuation checks cancellation, operation
+identity, the original window, display IDs and display bounds. Usable-area changes alone are allowed
+because macOS changes the menu bar and Dock insets during fullscreen transitions. A missing display
+or refused move returns the surviving window to fullscreen on its current display. A closed window,
+superseded operation or frame changed after placement never receives a later fullscreen request.
+With one display, the command leaves fullscreen untouched.
+
+Windows that are minimized, not `AXWindow`-roled (sheets, popovers), or that report no position or size
+are rejected before any work happens. Other geometry commands still skip native fullscreen windows.
 
 `AXEnhancedUserInterface` is cleared for the duration of the writes and restored immediately, because
 some apps reinterpret frame writes while it is on — but never while VoiceOver is running, which would
@@ -383,11 +415,12 @@ and every shortcut stays editable afterwards.
 
 ## Testing
 
-`Tests/window-command-test.swift` (507 assertions) covers the catalog, the AX-space convention lock,
+`Tests/window-command-test.swift` covers the catalog, the AX-space convention lock,
 tiling on divisible and non-divisible screens, off-origin and negative-coordinate displays, gap
 arithmetic including degenerate values, sizing, the Make Larger/Smaller round trip, nudges, display
-moves and wrapping, both cycling modes including the strip walk, its wrap and a run of real presses
-across displays, restore recovery, every `WindowActionMemory` rule, and a fuzz sweep over every
+moves and wrapping, proportional display occupancy with gaps and app-imposed frame differences,
+both cycling modes including the strip walk, its wrap and a run of real presses across displays,
+restore recovery, every `WindowActionMemory` rule, and a fuzz sweep over every
 command × gap × screen × cycle × step × degenerate window frame checking for non-finite output,
 negative dimensions, off-screen results, non-determinism and, at step 0, drift on repeat.
 
@@ -405,9 +438,14 @@ entry id, unit clamping and conversion, exact frames on every fixture display, g
 arithmetic, the host-display placement, and store CRUD, validation, import sanitising and
 persistence.
 
-Everything runs headless because the layer is pure. `WindowMover` and `SpaceSwitcher` are not compiled
-into either harness and have no automated coverage — the AX and `CGEvent` paths need manual
-verification, particularly:
+`Tests/window-mover-test.swift` compiles the shipped mover against stub AX and screen access. It
+covers a clipped transfer, the deferred correction, Restore, superseding commands and custom sizes,
+manual drags, a disconnected display, closed/fullscreen/fixed-size windows, honored writes and task
+teardown. Native fullscreen cases cover both directions, slow and ignored transitions, repeated
+commands, usable-area changes, refusal, disconnection and cancellation. It never reads or writes
+another app's windows.
+
+The real AX and `CGEvent` paths still need manual verification, particularly:
 
 1. A non-resizable window (System Information) must fail silently, left untouched rather than
    half-moved.
@@ -423,3 +461,7 @@ verification, particularly:
    not wedge the Dock or land two Spaces at once. A Space switch is not observable until it settles —
    sampling sooner than about three seconds returns mid-transition state that reads as a dropped or
    doubled move, which will make a working build look broken.
+7. **Native fullscreen across displays.** Enter through Toggle Fullscreen, move to the other display
+   and back, and confirm both the display and native fullscreen state after each transition. Exit
+   fullscreen and verify the ordinary proportional frame and Restore. Repeat from a smaller ordinary
+   window, and ensure repeated display presses do not interrupt the transfer.
